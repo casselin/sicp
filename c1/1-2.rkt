@@ -120,3 +120,76 @@ We have that \psi < 1, and as n -> \inf \psi^n -> 0. Thus \psi^n is
 insignificant in the closed formula of Fib(n), and we may simply
 compute \phi^n/sqrt(5) and round to the nearest integer.
 |#
+
+;; Exercise 1.14
+#|
+The tree for (count-change 11 5) is as follows:
+
+`-- (cc 11 5)
+    |-- (cc 11 4)
+    |   |-- (cc 11 3)
+    |   |   |-- (cc 11 2)
+    |   |   |   |-- (cc 11 1)
+    |   |   |   |   |-- (cc 11 0)
+    |   |   |   |   `-- (cc 10 1)
+    |   |   |   |       `-- ...
+    |   |   |   |           |-- (cc 1 0)
+    |   |   |   |           `-- (cc 0 1)
+    |   |   |   `-- (cc 6 2)
+    |   |   |       |-- (cc 6 1)
+    |   |   |       |   `-- ...
+    |   |   |       |       |-- (cc 1 0)
+    |   |   |       |       `-- (cc 0 1)
+    |   |   |       `-- (cc 1 2)
+    |   |   |           |-- (cc 1 1)
+    |   |   |           |   |-- (cc 1 0)
+    |   |   |           |   `-- (cc 0 1)
+    |   |   |           `-- (cc -4 2)
+    |   |   `-- (cc 1 3)
+    |   |       |-- (cc 1 2)
+    |   |       |   |-- (cc 1 1)
+    |   |       |   |   |-- (cc 1 0)
+    |   |       |   |   `-- (cc 0 1)
+    |   |       |   `-- (cc -4 2)
+    |   |       `-- (cc -9 3)
+    |   `-- (cc -14 4)
+    `-- (cc -39 5)
+
+The amount of space consumed by this process is the maximum height of the tree.
+The maximum height will be the path that decreases the denomination of the
+coins to the minimum denomination before reducing the change total. The length
+of this path increases linearly with the amount to be changed.
+
+Observe that for an amount to change n, there will be ceil(n/50) calls of the
+form (cc x 5). Each of these calls will generate a subtree of the form (cc x 4).
+Each subtree of this form will have ceil(y/25) calls of the form (cc y 4).
+Each of these calls will generate a subtree of the form (cc y 3), and so on.
+Following this pattern, we obtain (ignoring the ceiling function):
+(n/50)*(n/25)*(n/10)*(n/5)*(n) = \Theta(n^5)
+Thus the number of steps increases quintically with the amount of change.
+|#
+
+;; Exercise 1.15
+(define (cube x) (* x x x))
+
+(define (p x) (- (* 3 x) (* 4 (cube x))))
+
+(define (sine angle)
+  (if (not (> (abs angle) 0.1))
+      angle
+      (p (sine (/ angle 3.0)))))
+
+#|
+a.
+12.15/3^n <= 0.1
+121.5 <= 3^n
+log_3(121.5) <= n
+4.3691 <= n
+
+p will be applied 4 times when (sine 12.15) is evaluated (p is not applied
+once the angle is less than or equal to 0.1)
+
+b.
+The space and number of steps increases logarithmically with the size of the
+angle
+|#

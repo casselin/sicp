@@ -193,3 +193,62 @@ b.
 The space and number of steps increases logarithmically with the size of the
 angle
 |#
+
+;; Exercise 1.16
+(define (fast-expt b n)
+  (define (iter a b n)
+    (cond ((= n 0) a)
+          ((even? n) (iter a (* b b) (/ n 2)))
+          (else (iter (* a b) b (- n 1)))))
+  (iter 1 b n))
+
+;; Exercise 1.17
+(define (fast-mult a n)
+  (cond ((= n 0) 0)
+        ((even? n) (double (fast-mult a (halve n))))
+        (else (+ a (fast-mult a (- n 1))))))
+
+(define (double n)
+  (+ n n))
+
+; To be used for even numbers only
+(define (halve n)
+  (/ n 2))
+
+;; Exercise 1.18
+(define (fast-mult-iter b n)
+  (define (iter a b n)
+    (cond ((= n 0) a)
+          ((even? n) (iter a (double b) (halve n)))
+          (else (iter (+ a b) b (- n 1)))))
+  (iter 0 b n))
+
+;; Exercise 1.19
+#|
+T_{pq} = a <- bq + aq + ap
+         b <- bp + aq
+
+T^2_{pq} = a <- (bp+aq)q + (bq+aq+ap)q + (bq+aq+ap)p
+             =  b(2pq+q^2) + a(2pq+q^2) + a(p^2+q^2)
+
+           b <- (bp+aq)p + (bq+aq+ap)q
+             =  b(p^2+q^2) + a(2pq+q^2)
+
+Thus we see that p' = p^2 + q^2
+                 q' = 2pq + q^2
+|#
+(define (fib n)
+  (define (iter a b p q count)
+    (cond ((= count 0) b)
+          ((even? count)
+           (iter a
+                 b
+                 (+ (* p p) (* q q))
+                 (+ (* 2 p q) (* q q))
+                 (/ count 2)))
+          (else (iter (+ (* b q) (* a q) (* a p))
+                      (+ (* b p) (* a q))
+                      p
+                      q
+                      (- count 1)))))
+  (iter 1 0 0 1 n))

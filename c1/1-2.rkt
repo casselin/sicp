@@ -252,3 +252,33 @@ Thus we see that p' = p^2 + q^2
                       q
                       (- count 1)))))
   (iter 1 0 0 1 n))
+
+;; Exercise 1.20
+#|
+(rem* a b) indicates a remainder operation that will be performed
+Normal-order evaluation of (gcd 206 40)
+(gcd 206 40)
+(gcd 40 (rem* 206 40))
+(gcd (rem 206 40) (rem* 40 (rem* 206 40)))
+(gcd (rem 40 (rem 206 40)) (rem* (rem* 206 40) (rem* 40 (rem* 206 40))))
+(gcd (rem (rem 206 40) (rem 40 (rem 206 40)))
+          (rem* (rem* 40 (rem* 206 40))
+                (rem* (rem* 206 40) (rem* 40 (rem* 206 40)))))
+(rem* (rem* 206 40) (rem* 40 (rem* 206 40)))
+2
+For a total of 18 performed operations of remainder
+
+Applicative-order evaluation of (gcd 206 40)
+(gcd 206 40)
+(gcd 40 (rem* 206 40))
+(gcd 40 6)
+(gcd 6 (rem* 40 6))
+(gcd 6 4)
+(gcd 4 (rem* 6 4))
+(gcd 4 2)
+(gcd 2 (rem* 4 2))
+(gcd 2 0)
+2
+For a total of 4 performed operations of remainder
+
+|#

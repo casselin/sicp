@@ -282,3 +282,246 @@ Applicative-order evaluation of (gcd 206 40)
 For a total of 4 performed operations of remainder
 
 |#
+(define (square x)
+  (* x x))
+
+(define (smallest-divisor n)
+  (find-divisor n 2))
+
+(define (find-divisor n test-divisor)
+  (cond ((> (square test-divisor) n) n)
+        ((divides? test-divisor n) test-divisor)
+        (else (find-divisor n (+ test-divisor 1)))))
+
+(define (divides? a b)
+  (= (remainder b a) 0))
+
+(define (prime? n)
+  (= (smallest-divisor n) n))
+
+(define (expmod base exp m)
+  (cond ((= exp 0) 1)
+        ((even? exp)
+         (remainder (square (expmod base (/ exp 2) m))
+                    m))
+        (else
+         (remainder (* base (expmod base (- exp 1) m))
+                    m))))
+
+(define (fermat-test n)
+  (define (try-it a)
+    (= (expmod a n n) a))
+  (try-it (+ 1 (random (- n 1)))))
+
+(define (fast-prime? n times)
+  (cond ((= times 0) true)
+        ((fermat-test n) (fast-prime? n (- times 1)))
+        (else false)))
+
+;; Exercise 1.21
+#|
+(smallest-divisor 199)
+199
+
+(smallest-divisor 1999)
+1999
+
+(smallest-divisor 19999)
+7
+|#
+
+;; Exercise 1.22
+(define (timed-prime-test n)
+  (newline)
+  (display n)
+  (start-prime-test n (runtime)))
+
+(define (start-prime-test n start-time)
+  (if (prime? n)
+      (report-prime (- (runtime) start-time))))
+
+(define (report-prime elapsed-time)
+  (display " *** ")
+  (display elapsed-time))
+
+(define (search-for-primes start end)
+  (define (go a)
+    (cond ((not (> a end))
+           (timed-prime-test a)
+           (go (+ a 2)))))
+  (if (even? start)
+      (go (+ start 1))
+      (go start)))
+#|
+First three primes larger than 1000:
+1009 *** 3
+1013 *** 2
+1019 *** 2
+
+First three primes larger than 10000:
+10007 *** 5
+10009 *** 5
+10037 *** 5
+
+First three primes larger than 100000:
+100003 *** 11
+100019 *** 11
+100043 *** 11
+
+First three primes larger than 1000000:
+1000003 *** 34
+1000033 *** 32
+1000037 *** 31
+
+~10000 vs ~1000
+We expect (* (sqrt 10) 3) = 9.5, but we see 5
+
+~1000000 vs 100000
+We expect (* (sqrt 10) 11) = 34.5, and we see 34
+
+The result is compatible with the notion for larger input sizes.
+|#
+
+;; Exercise 1.23
+(define (smallest-divisor2 n)
+  (find-divisor2 n 2))
+
+(define (find-divisor2 n test-divisor)
+  (cond ((> (square test-divisor) n) n)
+        ((divides? test-divisor n) test-divisor)
+        (else (find-divisor2 n (next test-divisor)))))
+
+(define (next n)
+  (if (= n 2)
+      3
+      (+ n 2)))
+
+(define (prime2? n)
+  (= (smallest-divisor2 n) n))
+
+(define (timed-prime-test2 n)
+  (newline)
+  (display n)
+  (start-prime-test2 n (runtime)))
+
+(define (start-prime-test2 n start-time)
+  (if (prime2? n)
+      (report-prime (- (runtime) start-time))))
+
+#|
+New speeds => old / new
+1009 *** 5 => 0.6
+1013 *** 3 => ~0.67
+1019 *** 5 => 0.4
+10007 *** 6 => ~0.83
+10009 *** 7 => ~0.71
+10037 *** 7 => ~0.71
+100003 *** 11 => 1
+100019 *** 10 => 1.1
+100043 *** 14 => ~0.79
+1000003 *** 25 => 1.36
+1000033 *** 37 => ~0.86
+1000037 *** 26 => ~1.19
+
+An improvement is observed for some of the larger primes, but they are not
+twice as fast as the originals. This disagrees with the expectations decribed
+in the exercise. An explanation for this is that the improvement does not
+change the order of growth of the process: both processes grow according to
+the square root of the input. In practice, there will be necessary overhead
+present in both processes. This combined with the speed of modern computers
+makes it difficult to observe improved speeds for inputs of this size.
+|#
+
+;; Exercise 1.24
+(define (timed-prime-test3 n)
+  (newline)
+  (display n)
+  (start-prime-test3 n (runtime)))
+
+(define (start-prime-test3 n start-time)
+  (if (fast-prime? n 100)
+      (report-prime (- (runtime) start-time))))
+
+#|
+1009 *** 76
+1013 *** 87
+1019 *** 84
+10007 *** 92
+10009 *** 93
+10037 *** 90
+100003 *** 103
+100019 *** 106
+100043 *** 105
+1000003 *** 118
+1000033 *** 117
+1000037 *** 120
+
+We would the expect the process to take twice as long for primes near 1,000,000
+compared to primes near 1,000. This data appears to be less than twice
+the time. This discrepancy may be due to the random numbers generated
+during the fermat tests.
+|#
+
+;; Exercise 1.25
+#|
+No, this implementation is not suitable for our fast prime tester. This
+implementation does not control the size of a^n. Thus for testing large
+primes, a^n can exceed the memory limitations of the computer.
+|#
+
+;; Exercise 1.26
+#|
+Because of applicative-order evaluation, the computer will evaluate
+(expmod base (/ exp 2) m) completely twice: once for each factor in
+the multiplication.
+To see the effect on the order of growth, assume that
+(expmod base n m) takes k steps to complete.
+Observe that
+(expmod base 2n m)
+(* (expmod base n m)
+   (expmod base n m))
+So (expmod base 2n m) will take 2k steps to complete.
+Thus, doubling the size of the input doubles the number of steps to
+compute the result. Therefore this procedure is a \theta(n) process
+|#
+
+;; Exercise 1.27
+(define (carmichael n)
+  (define (iter a)
+    (cond ((= a n) true)
+          ((= (expmod a n n) a)
+           (iter (+ a 1)))
+          (else false)))
+  (iter 0))
+
+;; Exercise 1.28
+(define (expmod-mr base exp m)
+  (define (sqrmod-chk x)
+    (define (check sqr)
+      (if (and (= sqr 1)
+               (not (= x 1))
+               (not (= x (- m 1))))
+          0
+          sqr))
+    (check (remainder (square x) m)))
+  (cond ((= exp 0) 1)
+        ((even? exp)
+         (sqrmod-chk (expmod-mr base (/ exp 2) m)))
+        (else
+         (remainder (* base (expmod-mr base (- exp 1) m))
+                    m))))
+
+(define (miller-rabin n)
+  (define (try-it a)
+    (= (expmod-mr a (- n 1) n) 1))
+  (try-it (+ 1 (random (- n 1)))))
+
+(define (mr-prime? n times)
+  (cond ((= times 0) true)
+        ((miller-rabin n) (mr-prime? n (- times 1)))
+        (else false)))
+
+(define (smart-fast-prime? n)
+  (if (even? n)
+      (mr-prime? n (/ n 2))
+      (mr-prime? n (/ (+ n 1) 2))))

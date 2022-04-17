@@ -133,3 +133,13 @@
   (define (coprime? x)
     (= (gcd n x) 1))
   (filtered-accumulate coprime? * 1 identity 1 inc (- n 1)))
+
+;; Exercise 1.34
+#|
+> (f f)
+= (f 2)
+= (2 2)
+
+The interpreter would attempt to evaluate the procedure 2 and fail
+because it is not a procedure.
+|#

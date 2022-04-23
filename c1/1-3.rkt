@@ -33,6 +33,37 @@
       (+ (term a)
          (sum term (next a) next b))))
 
+(define tolerance 0.00001)
+
+(define (fixed-point f first-guess)
+  (define (close-enough? v1 v2)
+    (< (abs (- v1 v2)) tolerance))
+  (define (try guess)
+    (let ((next (f guess)))
+      (if (close-enough? guess next)
+          next
+          (try next))))
+  (try first-guess))
+
+(define (average-damp f)
+  (define (avg a b)
+    (/ (+ a b) 2))
+  (lambda (x) (avg x (f x))))
+
+(define dx 0.00001)
+
+(define (deriv g)
+  (lambda (x)
+    (/ (- (g (+ x dx)) (g x))
+       dx)))
+
+(define (newton-transform g)
+  (lambda (x)
+    (- x (/ (g x) ((deriv g) x)))))
+
+(define (newtons-method g guess)
+  (fixed-point (newton-transform g) guess))
+
 ;; Exercise 1.29
 ; n must be even
 (define (simpsons-rule f a b n)
@@ -143,18 +174,6 @@ The interpreter would attempt to evaluate the procedure 2 and fail
 because it is not a procedure.
 |#
 
-(define tolerance 0.00001)
-
-(define (fixed-point f first-guess)
-  (define (close-enough? v1 v2)
-    (< (abs (- v1 v2)) tolerance))
-  (define (try guess)
-    (let ((next (f guess)))
-      (if (close-enough? guess next)
-          next
-          (try next))))
-  (try first-guess))
-
 ;; Exercise 1.35
 #|
 x = 1 + 1/x
@@ -237,3 +256,93 @@ k = 11 produces a result accurate to 4 decimal places.
                     (* -1 (square x))))
               (lambda (i) (- (* 2 i) 1.0))
               k))
+
+;; Exercise 1.40
+(define (cubic a b c)
+  (lambda (x)
+    (+ (cube x)
+       (* a (square x))
+       (* b x)
+       c)))
+
+;; Exercise 1.41
+(define (double g)
+  (lambda (x)
+    (g (g x))))
+#|
+> (((double (double double)) inc) 5)
+= (((double (lamdba (f) (double (double f)))) inc) 5)
+= (((lambda (f) (double (double (double (double f))))) inc) 5)
+= ((double (double (double (double inc)))) 5)
+= 21
+|#
+
+;; Exercise 1.42
+(define (compose f g)
+  (lambda (x) (f (g x))))
+
+;; Exercise 1.43
+(define (repeated f n)
+  (if (= n 0)
+      identity
+      (compose f (repeated f (- n 1)))))
+
+;; Exercise 1.44
+(define (smooth f)
+  (define (average a b c)
+    (/ (+ a b c) 3))
+  (lambda (x)
+    (average (f (- x dx))
+             (f x)
+             (f (+ x dx)))))
+
+; The n-fold smoothed function is given by
+(define (n-fold-smoothed f n)
+  ((repeated smooth n) f))
+
+;; Exercise 1.45
+(define (expt b n)
+  (define (iter a b n)
+    (cond ((= n 0) a)
+          ((even? n) (iter a (* b b) (/ n 2)))
+          (else (iter (* a b) b (- n 1)))))
+  (iter 1 b n))
+
+(define (log2 x)
+  (/ (log x) (log 2)))
+
+(define (nth-root x n)
+  (let ((damped-g
+         ((repeated average-damp (floor (log2 n)))
+          (lambda (y) (/ x (expt y (- n 1)))))))
+    (fixed-point damped-g 1.0)))
+
+;; Exercise 1.46
+(define (iterative-improve good-enough? improve)
+  (define (go guess)
+    (if (good-enough? guess)
+        guess
+        (go (improve guess))))
+  (lambda (guess) (go guess)))
+
+(define (sqrt-ii x)
+  ((iterative-improve (lambda (guess)
+                       (< (abs (- (square guess) x)) 0.00001))
+                      (lambda (guess)
+                       (/ (+ guess (/ x guess)) 2)))
+   1.0))
+
+(define (fixed-point-ii f first-guess)
+  ((iterative-improve (lambda (guess)
+                        (< (abs (- guess (f guess))) 0.00001))
+                      (lambda (guess)
+                        (f guess)))
+   first-guess))
+#|
+This does not have the same behaviour as the fixed-point procedure
+from 1.3.4. Specifically, once the guess is good enough it returns
+the first guess rather than the next guess. Whereas the procedure
+from 1.3.4 returns the next guess instead. I believe this is not
+practically important, since once the guess is "good enough," both
+this guess and the next guess are within the given tolerance.
+|#

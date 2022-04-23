@@ -1,5 +1,4 @@
 #lang sicp
-(#%require "1-2.rkt")
 ;;; Chapter 1.3
 ; Needed from Section 1.2
 (define (square x) (* x x))
@@ -143,3 +142,98 @@
 The interpreter would attempt to evaluate the procedure 2 and fail
 because it is not a procedure.
 |#
+
+(define tolerance 0.00001)
+
+(define (fixed-point f first-guess)
+  (define (close-enough? v1 v2)
+    (< (abs (- v1 v2)) tolerance))
+  (define (try guess)
+    (let ((next (f guess)))
+      (if (close-enough? guess next)
+          next
+          (try next))))
+  (try first-guess))
+
+;; Exercise 1.35
+#|
+x = 1 + 1/x
+x^2 = x + 1
+x^2 - x - 1 = 0
+
+With \phi being a root of this polynomial. Thus \phi is a fixed point of
+x -> 1 + 1/x
+|#
+(define (golden-ratio)
+  (fixed-point (lambda (x) (+ 1 (/ 1 x)))
+               1.0))
+
+;; Exercise 1.36
+(define (fixed-point2 f first-guess)
+  (define (close-enough? v1 v2)
+    (< (abs (- v1 v2)) tolerance))
+  (define (try guess)
+    (let ((next (f guess)))
+      (cond ((close-enough? guess next)
+             (newline)
+             next)
+            (else
+             (newline)
+             (display next)
+             (try next)))))
+  (try first-guess))
+
+(define (x-to-the-x)
+  (fixed-point2 (lambda (x) (/ (log 1000) (log x)))
+                2.0))
+
+(define (x-to-the-x-damping)
+  (define (average x y)
+    (/ (+ x y) 2))
+  (fixed-point2 (lambda (x) (average x (/ (log 1000) (log x))))
+                2.0))
+#|
+Without average damping takes 34 steps.
+With average damping takes 9 steps.
+|#
+
+;; Exercise 1.37
+; a)
+(define (cont-frac1 n d k)
+  (define (recurse i)
+    (if (> i k)
+        0
+        (/ (n i)
+           (+ (d i) (recurse (+ i 1))))))
+  (recurse 1))
+#|
+k = 11 produces a result accurate to 4 decimal places.
+|#
+; b)
+(define (cont-frac2 n d k)
+  (define (iter i result)
+    (if (= i 0)
+        result
+        (iter (- i 1)
+              (/ (n i)
+                 (+ (d i) result)))))
+  (iter k 0))
+
+;; Exercise 1.38
+(define (nat-exp k)
+  (+ 2
+     (cont-frac1 (lambda (i) 1.0)
+                 (lambda (i)
+                   (if (= (remainder i 3) 2)
+                       (* 2 (/ (+ i 1) 3))
+                       1))
+                 k)))
+
+;; Exercise 1.39
+(define (tan-cf x k)
+  (cont-frac1 (lambda (i)
+                (if (= i 1)
+                    x
+                    (* -1 (square x))))
+              (lambda (i) (- (* 2 i) 1.0))
+              k))

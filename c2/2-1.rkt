@@ -180,3 +180,65 @@
         (c (distance (cdr r))))
     (sqrt (- (square c) (square a)))))
 
+;; Exercise 2.4
+#|
+(define (cdr z)
+  (lambda (p q) q))
+
+> (car (cons x y))
+= (car (lambda (m) (m x y)))
+= ((lambda (m) (m x y)) (lambda (p q) p))
+= ((lambda (p q) p) x y)
+= x
+
+> (cdr (cons x y))
+= (cdr (lambda (m) (m x y)))
+= ((lambda (m) (m x y)) (lambda (p q) q))
+= ((lambda (p q) q) x y)
+= y
+|#
+
+;; Exercise 2.5
+; Using make-pair, fst, snd instead of cons, car, cdr
+(define (make-pair a b)
+  (* (expt 2 a) (expt 3 b)))
+(define (fst z)
+  (define (iter count n)
+    (if (even? n)
+        (iter (+ count 1) (/ n 2))
+        count))
+  (iter 0 z))
+(define (snd z)
+  (define (iter count n)
+    (if (= (remainder n 3) 0)
+        (iter (+ count 1) (/ n 3))
+        count))
+  (iter 0 z))
+
+;; Exercise 2.6
+(define zero (lambda (f) (lambda (x) x)))
+
+(define (add-1 n)
+  (lambda (f) (lambda (x) (f ((n f) x)))))
+
+#|
+(add-1 zero)
+(add-1 (lambda (f) (lambda (x) x)))
+(lambda (f) (lambda (x) (f (((lambda (f) (lambda (x) x)) f) x))))
+(lambda (f) (lambda (x) (f ((lambda (x) x) x))))
+(lambda (f) (lambda (x) (f x)))
+
+(add-1 one)
+(add-1 (lambda (f) (lambda (x) (f x))))
+(lambda (f) (lambda (x) (f (((lambda (f) (lambda (x) (f x))) f) x))))
+(lambda (f) (lambda (x) (f ((lambda (x) (f x)) x))))
+(lambda (f) (lambda (x) (f (f x))))
+|#
+(define one
+  (lambda (f) (lambda (x) (f x))))
+
+(define two
+  (lambda (f) (lambda (x) (f (f x)))))
+
+(define (add m n)
+  (lambda (f) (lambda (x) ((m f) ((n f) x)))))

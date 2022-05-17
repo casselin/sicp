@@ -122,3 +122,31 @@ the factors
                 (<= yl 0)
                 (<= yu 0))
            (make-interval (* xu yu) (* xl yl))))))
+
+;; Exercise 2.12
+(define (make-center-width c w)
+  (make-interval (- c w) (+ c w)))
+
+(define (center i)
+  (/ (+ (lower-bound i) (upper-bound i)) 2))
+
+(define (make-center-percent c p)
+  (let ((lb (- c (* c p)))
+        (ub (+ c (* c p))))
+    (make-interval lb ub)))
+
+(define (percent i)
+  (/ (width i) (center i)))
+
+;; Exercise 2.13
+#|
+The percentage tolerance of a product of intervals
+(make-center-percent c1 p1)
+(make-center-percent c2 p2) where c1,c2 are positive, p1,p2 are small is
+
+((c1+p1c1)(c2p2c2)-(c1-p1c1)(c2-p2c2))/(c1+p1c1)(c2+p2c2)+(c1-p1c1)(c2-p2c2)
+= (p1 + p2) / (1 + p1*p2)
+
+If p1 and p2 are sufficiently small, then p1*p2 ~ 0 and the result above is
+approximated by p1 + p2
+|#

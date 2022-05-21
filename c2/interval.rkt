@@ -1,7 +1,7 @@
 #lang sicp
 ;; Section 2.1.4 - Interval Arithmetic
 
-(define (add-inteval x y)
+(define (add-interval x y)
   (make-interval (+ (lower-bound x) (lower-bound y))
                  (+ (upper-bound x) (upper-bound y))))
 
@@ -149,4 +149,67 @@ The percentage tolerance of a product of intervals
 
 If p1 and p2 are sufficiently small, then p1*p2 ~ 0 and the result above is
 approximated by p1 + p2
+|#
+
+;; Exercise 2.14
+(define (par1 r1 r2)
+  (div-interval (mul-interval r1 r2)
+                (add-interval r1 r2)))
+
+(define (par2 r1 r2)
+  (let ((one (make-interval 1 1)))
+    (div-interval one
+                  (add-interval (div-interval one r1)
+                                (div-interval one r2)))))
+(define A (make-center-percent 6.8 0.1))
+(define B (make-center-percent 4.7 0.05))
+(define A-over-A (div-interval A A))
+(define A-minus-A (sub-interval A A))
+(define A-over-B (div-interval A B))
+#|
+> (par1 A B)
+(2.201031010873943 . 3.4873689182805854)
+> (par2 A B)
+(2.581558809636278 . 2.97332259363673)
+we see that Lem is correct since these are not the same intervals
+
+> (center A-over-A)
+1.02020202020202
+> (percent A-over-A)
+0.19801980198019795
+
+> (center A-over-B)
+1.4576867701167813
+> (percent A-over-B)
+0.1492537313432836
+
+> A-minus-A
+(-1.3599999999999994 . 1.3599999999999994)
+> A-over-A
+(0.8181818181818182 . 1.222222222222222)
+
+Here we see that what the additive and multiplicative inverses
+of an interval are not what we expect. This explains why the
+algebraically equivalent expressions are not equivalent when
+dealing with intervals.
+|#
+
+;; Exercise 2.15
+#|
+Eva is correct because each time an uncertain variable is used in an
+operation, additional error/uncertainty is introduced. Thus to produce
+the tightest error bounds, we must be careful to introduce the least
+amount of uncertainty. This is accomplished by minimizing the number
+of appearances of an uncertain variable in a formula.
+|#
+
+;; Exercise 2.16
+#|
+Equivalent algebraic expressions may produce different results for the
+reason outlined in Exercise 2.15. In addition, the operations for interval
+arithmetic do not form a field. This means we cannot manipulate expressions
+involving intervals as we could with expressions involving (real) numbers.
+As such, a package without this defect would need to partition expressions
+into some equivalence class, and then convert any given expression into the
+representative for that class before performing the arithmetic.
 |#

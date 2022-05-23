@@ -52,4 +52,35 @@ the algorithm considers all possible combinations of coins.
           (else
            (helper parity (cdr y)))))
   (cons x (helper (remainder x 2) y)))
-    
+
+;; Exercise 2.21
+(define (square x) (* x x))
+(define (square-list1 items)
+  (if (null? items)
+      nil
+      (cons (square (car items)) (square-list1 (cdr items)))))
+
+(define (square-list2 items)
+  (map square items))
+
+;; Exercise 2.22
+#|
+This iterative implementation produces the answer in the reverse order
+because the first item in the input list is placed in the answer list
+first. This makes it the final item in the answer list. Then the second
+item in the input list is the second last, and so on. This produces an
+answer list in the reverse order.
+
+The second iterative implementation does not produce the correct answer
+because to construct a single list using cons, the second argument
+must be a list. Instead, the implementation produces a sequence of pairs
+where the `car` of the pair is the "previous" answer and the `cdr` of the
+pair is the "current" answer.
+|#
+
+;; Exercise 2.23
+(define (for-each f items)
+  (cond ((null? items) true)
+        (else
+         (f (car items))
+         (for-each f (cdr items)))))

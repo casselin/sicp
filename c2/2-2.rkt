@@ -84,3 +84,122 @@ pair is the "current" answer.
         (else
          (f (car items))
          (for-each f (cdr items)))))
+
+;; Exercise 2.24
+#|
+Interpreter output
+> (list 1 (list 2 (list 3 4)))
+(1 (2 (3 4)))
+
+Box-and-pointer
+(1 (2 (3 4)))     (2 (3 4))        (3 4)
+[o|o]         ->    [o|o]    =>    [o|o]  =>  [o|/]
+ v                   v              v          v
+[1]                 [2]            [3]        [4]
+
+Tree
+(1 (2 (3 4)))
+|-- 1
+`-- (2 (3 4))
+    |-- 2
+    |-- (3 4)
+    |-- 3
+    `-- 4
+|#
+
+;; Exercise 2.25
+#|
+> (car (cdaddr (list 1 3 (list 5 7) 9)))
+7
+> (caar (list (list 7)))
+7
+> (cadadr (cadadr (cadadr
+                   (list 1 (list 2 (list 3 (list 4 (list 5 (list 6 7)))))))))
+7
+|#
+
+;; Exercise 2.26
+#|
+> (append x y)
+(1 2 3 4 5 6)
+> (cons x y)
+((1 2 3) 4 5 6)
+> (list x y)
+((1 2 3) (4 5 6))
+|#
+
+;; Exercise 2.27
+(define (deep-reverse items)
+  (reverse
+   (map (lambda (x) (if (pair? x) (reverse x) x))
+        items)))
+
+;; Exercise 2.28
+(define (fringe x)
+  (define (help t acc)
+    (cond ((null? t) acc)
+          ((not (pair? t)) (cons t acc))
+          (else (help (car t) (help (cdr t) acc)))))
+  (help x nil))
+
+;; Exercise 2.29
+; a
+(define (make-mobile left right)
+  (list left right))
+(define (left-branch m)
+  (car m))
+(define (right-branch m)
+  (cadr m))
+
+(define (make-branch length structure)
+  (list length structure))
+(define (branch-length b)
+  (car b))
+(define (branch-structure b)
+  (cadr b))
+
+; b
+(define (mobile? s)
+  (pair? s))
+(define (total-weight m)
+  (cond ((null? m) 0)
+        ((not (mobile? m)) m)
+        (else
+         (let ((l (left-branch m))
+               (r (right-branch m)))
+           (+ (total-weight (branch-structure l))
+              (total-weight (branch-structure r)))))))
+
+; c
+(define (branch-torque b)
+  (* (branch-length b)
+     (total-weight (branch-structure b))))
+(define (balanced? m)
+  (define (helper m)
+    (if (not (mobile? m))
+        (cons m true)
+        (let ((l (helper (branch-structure (left-branch m))))
+              (r (helper (branch-structure (right-branch m)))))
+          (cons (+ (car l)
+                   (car r))
+                (and (cdr l)
+                     (cdr r)
+                     (= (* (branch-length (left-branch m))
+                           (car l))
+                        (* (branch-length (right-branch m))
+                           (car r))))))))
+  (cdr (helper m)))
+
+; d
+#|
+Changing to
+(define (make-mobile left right)
+  (cons left right))
+(define (make-branch length structure)
+  (cons length structure))
+Only requires changing the selectors right-branch and branch-structure into
+(define (right-branch m)
+  (cdr m))
+(define (branch-structure b)
+  (cdr b))
+|#

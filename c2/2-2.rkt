@@ -203,3 +203,41 @@ Only requires changing the selectors right-branch and branch-structure into
 (define (branch-structure b)
   (cdr b))
 |#
+
+;; Exercise 2.30
+(define (square-tree1 tree)
+  (cond ((null? tree) nil)
+        ((not (pair? tree)) (square tree))
+        (else (cons (square-tree1 (car tree))
+                    (square-tree1 (cdr tree))))))
+
+(define (square-tree2 tree)
+  (map (lambda (sub-tree)
+         (if (pair? sub-tree)
+             (square-tree2 sub-tree)
+             (square sub-tree)))
+       tree))
+
+;; Exercise 2.31
+(define (tree-map f tree)
+  (map (lambda (sub-tree)
+         (if (pair? sub-tree)
+             (tree-map f sub-tree)
+             (f sub-tree)))
+       tree))
+(define (square-tree tree)
+  (tree-map square tree))
+
+;; Exercise 2.32
+(define (subsets s)
+  (if (null? s)
+      (list nil)
+      (let ((rest (subsets (cdr s))))
+        (append rest (map (lambda (l) (cons (car s) l))
+                          rest)))))
+#|
+The recursive plan for subsets is as follows
+* The subsets of the empty set is (())
+* The subsets of a list x is the subsets of (cdr x) appended
+with (car x) cons'd to each subset of (cdr x)
+|#

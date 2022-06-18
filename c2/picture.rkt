@@ -192,3 +192,48 @@
                         bottom-left
                         bottom-middle
                         bottom-right))))
+
+;; Exercise 2.50
+(define (flip-horiz painter)
+  (transform-painter painter
+                     (vect 1.0 0.0)
+                     (vect 0.0 0.0)
+                     (vect 1.0 1.0)))
+
+(define (rotate180 painter)
+  (transform-painter painter
+                     (vect 1.0 1.0)
+                     (vect 0.0 1.0)
+                     (vect 1.0 0.0)))
+
+(define (rotate270 painter)
+  (transform-painter painter
+                     (vect 0.0 1.0)
+                     (vect 0.0 0.0)
+                     (vect 1.0 1.0)))
+
+;; Exercise 2.51
+; Analogous to beside
+(define (below1 painter1 painter2)
+  (let ((split-point (vect 0.0 0.5)))
+    (let ((paint-bottom
+           (transform-painter painter1
+                              (vect 0.0 0.0)
+                              (vect 1.0 0.0)
+                              split-point))
+          (paint-top
+           (transform-painter painter2
+                              split-point
+                              (vect 1.0 0.5)
+                              (vect 0.0 1.0))))
+      (lambda (frame)
+        (paint-bottom frame)
+        (paint-top frame)))))
+
+; As a rotation of beside
+(define (below2 painter1 painter2)
+  (let ((paint-bottom (rotate270 painter1))
+        (paint-top (rotate270 painter2)))
+    (rotate90 (beside paint-bottom paint-top))))
+
+;; Exercise 2.52

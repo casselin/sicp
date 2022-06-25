@@ -237,3 +237,85 @@
     (rotate90 (beside paint-bottom paint-top))))
 
 ;; Exercise 2.52
+; a
+(define (range low high step)
+  (if (> low high)
+      nil
+      (cons low (range (+ low step) high step))))
+
+(define (linearize-parabola para low high n)
+  (let ((xs (range low high (/ (- high low) n))))
+    (let ((ys (map para xs)))
+      (make-segments-list (map vect xs ys)))))
+
+(define wave2
+  (let ((upper-left (make-segments-list
+                     (list (vect 0.0 0.85)
+                           (vect 0.15 0.6)
+                           (vect 0.3 0.65)
+                           (vect 0.4 0.65)
+                           (vect 0.35 0.85)
+                           (vect 0.4 1.0))))
+        (smile (linearize-parabola (lambda (x) (+ (* 6 x x) (* -6 x) 2.22))
+                                   0.4
+                                   0.6
+                                   6))
+        (upper-right (make-segments-list
+                      (list (vect 0.6 1.0)
+                            (vect 0.65 0.85)
+                            (vect 0.6 0.65)
+                            (vect 0.75 0.65)
+                            (vect 1.0 0.35))))
+        (bottom-left (make-segments-list
+                      (list (vect 0.25 0.0)
+                            (vect 0.35 0.5)
+                            (vect 0.3 0.6)
+                            (vect 0.15 0.4)
+                            (vect 0.0 0.65))))
+        (bottom-middle (make-segments-list
+                        (list (vect 0.6 0.0)
+                              (vect 0.5 0.3)
+                              (vect 0.4 0.0))))
+        (bottom-right (make-segments-list
+                       (list (vect 1.0 0.15)
+                             (vect 0.6 0.45)
+                             (vect 0.75 0.0)))))
+    (segments->painter (append
+                        upper-left
+                        smile
+                        upper-right
+                        bottom-left
+                        bottom-middle
+                        bottom-right))))
+
+;b
+; corner-split modified so top-left and bottom-right combine with below and beside
+; respectively, rather than beside and below respectively
+(define (corner-split2 painter n)
+  (if (= n 0)
+      painter
+      (let ((up (up-split painter (- n 1)))
+            (right (right-split painter (- n 1))))
+        (let ((top-left (below up up))
+              (bottom-right (beside right right))
+              (corner (corner-split2 painter (- n 1))))
+          (beside (below painter top-left)
+                  (below bottom-right corner))))))
+
+(define (square-limit2 painter n)
+  (let ((quarter (corner-split2 painter n)))
+    (let ((half (beside (flip-horiz quarter) quarter)))
+      (below (flip-vert half) half))))
+
+;c
+; square-limit modified so the big pictures appear in the corners
+(define (square-limit3 painter n)
+  (let ((quarter (rotate180 (corner-split (rotate180 painter) n))))
+    (let ((half (beside (flip-horiz quarter) quarter)))
+      (below (flip-vert half) half))))
+
+; square-limit and corner-split modifications combined
+(define (square-limit4 painter n)
+  (let ((quarter (rotate180 (corner-split2 (rotate180 painter) n))))
+    (let ((half (beside (flip-horiz quarter) quarter)))
+      (below (flip-vert half) half))))

@@ -40,6 +40,11 @@
 (define get (operation-table 'lookup-proc))
 (define put (operation-table 'insert-proc!))
 
+;; Coercion table from Section 2.5.2
+(define coercion-table (make-table))
+(define get-coercion (coercion-table 'lookup-proc))
+(define put-coercion (coercion-table 'insert-proc!))
+
 ;; Definitions from 2.4
 ; Modified for exercise 2.78
 (define (attach-tag type-tag contents)
@@ -57,14 +62,40 @@
         (else
          (error "Bad tagged datum -- CONTENTS" datum))))
 
+#| Extended in Exercise 2.82
+;; Extended to include type coercion in Section 2.5.2
 (define (apply-generic op . args)
   (let ((type-tags (map type-tag args)))
     (let ((proc (get op type-tags)))
       (if proc
           (apply proc (map contents args))
-          (error
-           "No method for these types -- APPLY-GENERIC"
-           (list op type-tags))))))
+          (if (= (length args) 2)
+              (let ((type1 (car type-tags))
+                    (type2 (cadr type-tags))
+                    (a1 (car args))
+                    (a2 (cadr args)))
+                ;; Exercise 2.81c
+                (if (eq? type1 type2)
+                    (error "No method for these types"
+                           (list op type-tags))
+                ;;
+                    (let ((t1->t2 (get-coercion type1 type2))
+                          (t2->t1 (get-coercion type2 type1)))
+                      (cond (t1->t2
+                             (apply-generic op (t1->t2 a1) a2))
+                            (t2->t1
+                             (apply-generic op a1 (t2->t1 a2)))
+                            (else
+                             (error "No method for these types"
+                                    (list op type-tags))))))
+                (error "No method for these types"
+                       (list op type-tags))))))))
+|#
+
+(define (scheme-number->complex n)
+  (make-complex-from-real-imag (contents n) 0))
+
+(put-coercion 'scheme-number 'complex scheme-number->complex)
 
 ;; Definitions from Section 2.5
 
@@ -235,6 +266,15 @@
   ;; exercise 2.80
   (define (=zero-complex? z)
     (equ? (magnitude z) 0))
+
+  ;; test procedure for 2.82
+  (define (add3-complex z1 z2 z3)
+    (make-from-real-imag (+ (real-part z1)
+                            (real-part z2)
+                            (real-part z3))
+                         (+ (imag-part z1)
+                            (imag-part z2)
+                            (imag-part z3))))
   ;; interface to rest of the system
   (define (tag z) (attach-tag 'complex z))
   (put 'add '(complex complex)
@@ -261,6 +301,10 @@
 
   ;; exercise 2.80
   (put '=zero? '(complex) =zero-complex?)
+
+  ;; test procedure for 2.82
+  (put 'add3 '(complex complex complex)
+       (lambda (z1 z2 z3) (tag (add3-complex z1 z2 z3))))
   'done)
 
 (define (make-complex-from-real-imag x y)
@@ -305,3 +349,88 @@ Inserted above
 
 ;; Exercise 2.80
 (define (=zero? x) (apply-generic '=zero? x))
+
+;; Exercise 2.81
+; a
+#|
+With the proposed changes if apply-generic is called with two of the same
+arguments for an operation that is not found in the operation table, then
+apply-generic will enter an infinite loop.
+|#
+
+; b
+#|
+The proposed changes are not necessary because the only case where
+apply-generic will attempt to coerce the types to their own type is
+when there is no procedure for those types in the operations table.
+In this case, since there will be no appropriate coercion procedures
+in the coercion table, apply-generic will report an error. Thus
+apply-generic works correctly. However, checking for the coercion
+procedures is wasted effort, and such a situation could be reported
+as a different error for more transparency.
+|#
+
+;; Exercise 2.82
+(define (coerce-all to-type args)
+  (define (iter result rest)
+    (if (null? rest)
+        result
+        (let ((from-type (type-tag (car rest))))
+          (if (eq? from-type to-type)
+              (iter (cons (car rest)
+                          result)
+                    (cdr rest))
+              (let ((from->to (get-coercion from-type to-type)))
+                (if from->to
+                    (iter (cons (from->to (car rest))
+                                result)
+                          (cdr rest))
+                    #f))))))
+  (let ((res (iter '() args)))
+    (if res
+        (reverse res)
+        #f)))
+
+(define (find-coercion type-tags args)
+  (define (iter types)
+    (if (null? types)
+        #f
+        (let ((coerced-args (coerce-all (car types) args)))
+          (if coerced-args
+              coerced-args
+              (iter (cdr types))))))
+  (iter type-tags))
+
+(define (same-type? types)
+  (cond ((null? types) #t)
+        ((null? (cdr types)) #t)
+        (else
+         (and (eq? (car types) (cadr types))
+              (same-type? (cdr types))))))
+         
+(define (apply-generic op . args)
+  (let ((type-tags (map type-tag args)))
+    (let ((proc (get op type-tags)))
+      (cond (proc (apply proc (map contents args)))
+            ((same-type? type-tags)
+             (error "No method for these types"
+                    (list op type-tags)))
+            (else
+             (let ((coercions (find-coercion type-tags args)))
+               (if coercions
+                   (apply apply-generic (cons op coercions))
+                   (error "No method for these types"
+                          (list op type-tags)))))))))
+
+(define (add3 z1 z2 z3) (apply-generic 'add3 z1 z2 z3))
+
+#|
+Consider the case of an operation op on the types '(complex rational).
+If provided arguments of types '(complex scheme-number), apply-generic will
+never try to apply op to the (coerced) arguments, instead it will look for
+a version of op that requires types '(complex complex) instead. There may
+be a case where no such version of op exists, and apply-generic will fail
+even though a valid operation exists.
+|#
+
+;; Exercise 2.83

@@ -255,7 +255,7 @@
   (define (imag-pt z) (cdr z))
   (define (make-from-real-imag x y)
     (if (and (data-lower-than? x 'complex) (data-lower-than? y 'complex))
-        (cons x y)
+        (cons (drop x) (drop y))
         (error "Invalid real or imaginary type -- MAKE-FROM-REAL-IMAG"
                (list x y))))
   (define (mag z)
@@ -288,7 +288,7 @@
   (define (ang z) (cdr z))
   (define (make-from-mag-ang r a)
     (if (and (data-lower-than? r 'complex) (data-lower-than? a 'complex))
-        (cons r a)
+        (cons (drop r) (drop a))
         (error "Invalid magnitude or angle type -- MAKE-FROM-MAG-ANG"
                (list r a))))
   (define (real-pt z)

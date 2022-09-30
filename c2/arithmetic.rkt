@@ -1,6 +1,8 @@
 #lang sicp
 ;;; Chapter 2.5
 
+(#%provide (all-defined))
+
 (define (square x)
   (* x x))
 
@@ -121,6 +123,10 @@
   (put 'make 'scheme-number
        (lambda (x) (tag x)))
 
+  (define (scheme-number->rational n)
+    (make-rational (contents n) 1))
+  (put-coercion 'scheme-number 'rational scheme-number->rational)
+
   ;; exercise 2.79
   (put 'equ? '(scheme-number scheme-number) =)
 
@@ -150,6 +156,11 @@
   (define (div-rat x y)
     (make-rat (* (numer x) (denom y))
               (* (denom x) (numer y))))
+
+  (define (rational->complex r)
+    (let ((x (/ (numer (contents r)) (denom (contents r)))))
+      (make-complex-from-real-imag x 0)))
+  (put-coercion 'rational 'complex rational->complex)
 
   ;; exercise 2.79
   (define (equ-rat? x y)
@@ -184,23 +195,23 @@
 
 (define (install-rectangular-package)
   ;; internal procedures
-  (define (real-part z) (car z))
-  (define (imag-part z) (cdr z))
+  (define (real-pt z) (car z))
+  (define (imag-pt z) (cdr z))
   (define (make-from-real-imag x y) (cons x y))
-  (define (magnitude z)
-    (sqrt (+ (square (real-part z))
-             (square (imag-part z)))))
-  (define (angle z)
-    (atan (imag-part z) (real-part z)))
+  (define (mag z)
+    (sqrt (+ (square (real-pt z))
+             (square (imag-pt z)))))
+  (define (ang z)
+    (atan (imag-pt z) (real-pt z)))
   (define (make-from-mag-ang r a)
     (cons (* r (cos a)) (* r (sin a))))
 
   ;; interface to rest of the system
   (define (tag x) (attach-tag 'rectangular x))
-  (put 'real-part '(rectangular) real-part)
-  (put 'imag-part '(rectangular) imag-part)
-  (put 'magnitude '(rectangular) magnitude)
-  (put 'angle '(rectangular) angle)
+  (put 'real-pt '(rectangular) real-pt)
+  (put 'imag-pt '(rectangular) imag-pt)
+  (put 'mag '(rectangular) mag)
+  (put 'ang '(rectangular) ang)
   (put 'make-from-real-imag 'rectangular
        (lambda (x y) (tag (make-from-real-imag x y))))
   (put 'make-from-mag-ang 'rectangular
@@ -209,33 +220,33 @@
 
 (define (install-polar-package)
   ;; internal procedures
-  (define (magnitude z) (car z))
-  (define (angle z) (cdr z))
+  (define (mag z) (car z))
+  (define (ang z) (cdr z))
   (define (make-from-mag-ang r a) (cons r a))
-  (define (real-part z)
-    (* (magnitude z) (cos (angle z))))
-  (define (imag-part z)
-    (* (magnitude z) (sin (angle z))))
+  (define (real-pt z)
+    (* (mag z) (cos (ang z))))
+  (define (imag-pt z)
+    (* (mag z) (sin (ang z))))
   (define (make-from-real-imag x y)
     (cons (sqrt (+ (square x) (square y)))
           (atan y x)))
 
   ;; interface to rest of the system
   (define (tag x) (attach-tag 'polar x))
-  (put 'real-part '(polar) real-part)
-  (put 'imag-part '(polar) imag-part)
-  (put 'magnitude '(polar) magnitude)
-  (put 'angle '(polar) angle)
+  (put 'real-pt '(polar) real-pt)
+  (put 'imag-pt '(polar) imag-pt)
+  (put 'mag '(polar) mag)
+  (put 'ang '(polar) ang)
   (put 'make-from-real-imag 'polar
        (lambda (x y) (tag (make-from-real-imag x y))))
   (put 'make-from-mag-ang 'polar
        (lambda (r a) (tag (make-from-mag-ang r a))))
   'done)
 
-(define (real-part z) (apply-generic 'real-part z))
-(define (imag-part z) (apply-generic 'imag-part z))
-(define (magnitude z) (apply-generic 'magnitude z))
-(define (angle z) (apply-generic 'angle z))
+(define (real-pt z) (apply-generic 'real-pt z))
+(define (imag-pt z) (apply-generic 'imag-pt z))
+(define (mag z) (apply-generic 'mag z))
+(define (ang z) (apply-generic 'ang z))
 
 (define (install-complex-package)
   ;; imported procedures from rectangular and polar packages
@@ -246,35 +257,35 @@
 
   ;; internal procedures
   (define (add-complex z1 z2)
-    (make-from-real-imag (+ (real-part z1) (real-part z2))
-                         (+ (imag-part z1) (imag-part z2))))
+    (make-from-real-imag (+ (real-pt z1) (real-pt z2))
+                         (+ (imag-pt z1) (imag-pt z2))))
   (define (sub-complex z1 z2)
-    (make-from-real-imag (- (real-part z1) (real-part z2))
-                         (- (imag-part z1) (imag-part z2))))
+    (make-from-real-imag (- (real-pt z1) (real-pt z2))
+                         (- (imag-pt z1) (imag-pt z2))))
   (define (mul-complex z1 z2)
-    (make-from-mag-ang (* (magnitude z1) (magnitude z2))
-                       (+ (angle z1) (angle z2))))
+    (make-from-mag-ang (* (mag z1) (mag z2))
+                       (+ (ang z1) (ang z2))))
   (define (div-complex z1 z2)
-    (make-from-mag-ang (/ (magnitude z1) (magnitude z2))
-                       (- (angle z1) (angle z2))))
+    (make-from-mag-ang (/ (mag z1) (mag z2))
+                       (- (ang z1) (ang z2))))
 
   ;; exercise 2.79
   (define (equ-complex? z1 z2)
-    (and (equ? (real-part z1) (real-part z2))
-         (equ? (imag-part z1) (imag-part z2))))
+    (and (equ? (real-pt z1) (real-pt z2))
+         (equ? (imag-pt z1) (imag-pt z2))))
 
   ;; exercise 2.80
   (define (=zero-complex? z)
-    (equ? (magnitude z) 0))
+    (equ? (mag z) 0))
 
   ;; test procedure for 2.82
   (define (add3-complex z1 z2 z3)
-    (make-from-real-imag (+ (real-part z1)
-                            (real-part z2)
-                            (real-part z3))
-                         (+ (imag-part z1)
-                            (imag-part z2)
-                            (imag-part z3))))
+    (make-from-real-imag (+ (real-pt z1)
+                            (real-pt z2)
+                            (real-pt z3))
+                         (+ (imag-pt z1)
+                            (imag-pt z2)
+                            (imag-pt z3))))
   ;; interface to rest of the system
   (define (tag z) (attach-tag 'complex z))
   (put 'add '(complex complex)
@@ -291,10 +302,10 @@
        (lambda (r a) (tag (make-from-mag-ang r a))))
 
   ;; exercise 2.77
-  (put 'real-part '(complex) real-part)
-  (put 'imag-part '(complex) imag-part)
-  (put 'magnitude '(complex) magnitude)
-  (put 'angle '(complex) angle)
+  (put 'real-pt '(complex) real-pt)
+  (put 'imag-pt '(complex) imag-pt)
+  (put 'mag '(complex) mag)
+  (put 'ang '(complex) ang)
 
   ;; exercise 2.79
   (put 'equ? '(complex complex) equ-complex?)

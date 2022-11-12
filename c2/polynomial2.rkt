@@ -5,12 +5,22 @@
 ;; subpackages for representing sparse and dense polynomials
 ;; described in exercises 2.89 and 2.90
 
+;; list operations
 (define (filter predicate sequence)
   (cond ((null? sequence) nil)
         ((predicate (car sequence))
          (cons (car sequence)
                (filter predicate (cdr sequence))))
         (else (filter predicate (cdr sequence)))))
+
+(define (foldr combiner null-value seq)
+  (if (null? seq)
+      null-value
+      (combiner (car seq)
+                (foldr combiner null-value (cdr seq)))))
+
+(define (flatmap op seq)
+  (foldr append '() (map op seq)))
 
 (define (install-polynomial-package)
   ;; imported from dense and sparse packages
@@ -28,6 +38,10 @@
   (define (same-variable? v1 v2)
     (and (variable? v1) (variable? v2) (eq? v1 v2)))
 
+  (define (order-poly p)
+    (order (term-list p)))
+
+  #|
   (define (add-poly p1 p2)
   (if (same-variable? (variable p1) (variable p2))
       (make-poly (variable p1)
@@ -35,15 +49,16 @@
                       (term-list p2)))
       (error "Polys not in same var -- ADD-POLY"
              (list p1 p2))))
-
+  
+  
   (define (mul-poly p1 p2)
     (if (same-variable? (variable p1) (variable p2))
         (make-poly (variable p1)
                    (mul (term-list p1)
-                            (term-list p2)))
+                        (term-list p2)))
         (error "Polys not in same var -- MUL-POLY"
                (list p1 p2))))
- 
+  |#
   ;; interface to rest of the system
   (define (tag p) (attach-tag 'polynomial p))
   (put 'add '(polynomial polynomial)
@@ -54,6 +69,7 @@
        (lambda (var terms) (tag (make-from-dense-termlist var terms))))
   (put 'make-sparse 'polynomial
        (lambda (var terms) (tag (make-from-sparse-termlist var terms))))
+  (put 'order '(polynomial) order-poly)
 
   ;; exercise 2.87
   (define (=zero-poly? p)
@@ -86,6 +102,90 @@
                (list p1 p2))))
   (put 'div '(polynomial polynomial)
        (lambda (p1 p2) (map tag (div-poly p1 p2))))
+
+  ;; exercise 2.92
+  ; This must recursively place the old variable into the coefficients
+  ; of the term-list
+  
+  (define (variable<? variable1 variable2)
+    (cond ((eq? 'const variable1) #f)
+          ((eq? 'const variable2) #t)
+          (else
+           (string<? (symbol->string variable1)
+                     (symbol->string variable2)))))
+
+  (define (poly? datum)
+    (and (pair? datum)
+         (eq? 'polynomial (type-tag datum))))
+
+  (define (raise-poly-to p var)
+    (if (eq? var (variable p))
+        p
+        (make-poly var (raise-termlist-to (term-list p)
+                                          var
+                                          (variable p)))))
+
+  (define (raise-termlist-to L new-var old-var)
+    (if (empty-termlist? L)
+        (make-sparse-termlist '())
+        (add (raise-term-to (first-term L) new-var old-var)
+             (raise-termlist-to (rest-terms L) new-var old-var))))
+
+  (define (raise-term-to term new-var old-var)
+    (let ((coef (coeff term))
+          (ord (order term)))
+      (if (poly? coef)
+          (let ((raised (raise-poly-to (contents coef) new-var)))
+            (swap-termlist-vars (term-list raised) new-var old-var ord))
+          (make-term
+           0
+           (make-sparse-polynomial old-var
+                                   (list (make-term ord coef)))))))
+
+  (define (swap-termlist-vars termlist var old-var old-ord)
+    (if (empty-termlist? termlist)
+        (make-sparse-termlist '())
+        (add (swap-term-vars (first-term termlist) var old-var old-ord)
+             (swap-termlist-vars (rest-terms termlist) var old-var old-ord))))
+
+  (define (swap-term-vars term var old-var old-ord)
+    (let ((coef (coeff term))
+          (ord (order term)))
+      (make-term
+       ord
+       (make-sparse-polynomial old-var
+                               (list (make-term old-ord coef))))))
+            
+  (define (add-poly p1 p2)
+    (let ((var1 (variable p1))
+          (var2 (variable p2)))
+      (cond ((same-variable? var1 var2)
+             (make-poly var1
+                        (add (term-list p1)
+                             (term-list p2))))
+            ((variable<? var1 var2)
+             (make-poly var1
+                        (add (term-list p1)
+                             (term-list (raise-poly-to p2 var1)))))
+            (else
+             (make-poly var2
+                        (add (term-list (raise-poly-to p1 var2))
+                             (term-list p2)))))))
+  (define (mul-poly p1 p2)
+    (let ((var1 (variable p1))
+          (var2 (variable p2)))
+      (cond ((same-variable? var1 var2)
+             (make-poly var1
+                        (mul (term-list p1)
+                             (term-list p2))))
+            ((variable<? var1 var2)
+             (make-poly var1
+                        (mul (term-list p1)
+                             (term-list (raise-poly-to p2 var1)))))
+            (else
+             (make-poly var2
+                        (mul (term-list (raise-poly-to p1 var2))
+                             (term-list p2)))))))
   'done)
 
 (install-polynomial-package)
@@ -162,14 +262,22 @@ add-terms and mul-terms).
        (lambda (t1 t2) (tag (mul-term t1 t2))))
   (put 'negate '(term)
        (lambda (t) (tag (negate-term t))))
+
+  ; coercions
+  (define (term->sparse t)
+    (make-sparse-termlist (list t)))
+  (put-coercion 'term 'sparse term->sparse)
+  (define (term->dense t)
+    ((get-coercion 'sparse 'dense) (make-sparse-termlist (list t))))
+  (put-coercion 'term 'dense term->dense)
   'done)
 
 (define (make-term order coeff)
   ((get 'make 'term) order coeff))
-(define (order term)
-  (apply-generic 'order term))
-(define (coeff term)
-  (apply-generic 'coeff term))
+(define (order x)
+  (apply-generic 'order x))
+(define (coeff x)
+  (apply-generic 'coeff x))
 (install-term-package)
 
 (define (install-dense-termlist-package)
@@ -206,6 +314,9 @@ add-terms and mul-terms).
         #t
         (let ((t (first-term L)) (ts (rest-terms L)))
           (and (=zero? t) (=zero-terms? ts)))))
+
+  (define (order-terms L)
+    (- (length L) 1))
   
   (define (add-terms L1 L2)
     (cond ((empty-termlist? L1) L2)
@@ -251,6 +362,7 @@ add-terms and mul-terms).
        (lambda (term-list) (tag (rest-terms term-list))))
   (put 'empty-termlist? '(dense) empty-termlist?)
   (put '=zero? '(dense) =zero-terms?)
+  (put 'order '(dense) order-terms)
   (put 'add '(dense dense)
        (lambda (L1 L2) (tag (add-terms L1 L2))))
   (put 'mul '(dense dense)
@@ -329,6 +441,9 @@ add-terms and mul-terms).
         (let ((t (first-term L)) (ts (rest-terms L)))
           (and (=zero? t) (=zero-terms? ts)))))
 
+  (define (order-terms L)
+    (order (first-term L)))
+
   (define (add-terms L1 L2)
     (cond ((empty-termlist? L1) L2)
           ((empty-termlist? L2) L1)
@@ -372,6 +487,7 @@ add-terms and mul-terms).
        (lambda (term-list) (tag (rest-terms term-list))))
   (put 'empty-termlist? '(sparse) empty-termlist?)
   (put '=zero? '(sparse) =zero-terms?)
+  (put 'order '(sparse) order-terms)
   (put 'add '(sparse sparse)
        (lambda (L1 L2) (tag (add-terms L1 L2))))
   (put 'mul '(sparse sparse)
@@ -415,3 +531,9 @@ add-terms and mul-terms).
 (install-sparse-termlist-package)
 (define (make-sparse-termlist L)
   ((get 'make 'sparse) L))
+
+;; exercise 2.92
+(define (scheme-number->polynomial n)
+  (make-sparse-polynomial 'const (list (make-term 0 n))))
+(put-coercion 'scheme-number 'polynomial
+              scheme-number->polynomial)

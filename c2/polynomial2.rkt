@@ -1,9 +1,8 @@
 #lang sicp
 
-(#%require "arithmetic.rkt")
-;;; Alternate version of polynomial package, creating two
-;; subpackages for representing sparse and dense polynomials
-;; described in exercises 2.89 and 2.90
+(#%require "arithmetic2.rkt")
+;;; Alternate version of the polynomial package, completing
+;; the exercises in Section 2.5.3 starting from exercise 2.89
 
 ;; list operations
 (define (filter predicate sequence)
@@ -186,6 +185,31 @@
              (make-poly var2
                         (mul (term-list (raise-poly-to p1 var2))
                              (term-list p2)))))))
+
+  ; exercise 2.94
+  (define (gcd-poly a b)
+    (let ((var1 (variable a))
+          (var2 (variable b)))
+      (if (same-variable? var1 var2)
+          (make-poly var1
+                     (greatest-common-divisor (term-list a)
+                                              (term-list b)))
+          (error "Polynomials not in same variable"
+                 (list a b)))))
+  (put 'gcd '(polynomial polynomial)
+       (lambda (a b) (tag (gcd-poly a b))))
+
+  ; exercise 2.97
+  (define (reduce-poly n d)
+    (if (same-variable? (variable n) (variable d))
+        (map (lambda (L)
+               (make-poly (variable n) L))
+             (reduce (term-list n)
+                     (term-list d)))
+        (error "Polynomials not in same variable"
+               (list n d))))
+  (put 'reduce '(polynomial polynomial)
+       (lambda (n d) (map tag (reduce-poly n d))))
   'done)
 
 (install-polynomial-package)
@@ -409,6 +433,53 @@ add-terms and mul-terms).
                     (list q r))))))))
   (put 'div '(dense dense)
        (lambda (L1 L2) (map tag (div-terms L1 L2))))
+
+  ; exercise 2.94
+  (define (remainder-terms L1 L2)
+    (cadr (div-terms L1 L2)))
+
+  #| rewritten in exercise 2.96
+  (define (gcd-terms a b)
+    (if (empty-termlist? b)
+        a
+        (gcd-terms b (remainder-terms a b))))
+  |#
+  (put 'gcd '(dense dense)
+       (lambda (a b) (tag (gcd-terms a b))))
+
+  ; exercise 2.96
+  (define (integerizing-factor L1 L2)
+    (let ((c (coeff (first-term L2)))
+          (O1 (order-terms L1))
+          (O2 (order-terms L2)))
+      (expt c (+ 1 (- O1 O2)))))
+  (define (pseudoremainder-terms L1 L2)
+    (let ((factor (integerizing-factor L1 L2)))
+      (let ((new-dividend (mul-term-by-all-terms
+                           (make-term 0 factor)
+                           L1)))
+        (cadr (div-terms new-dividend L2)))))
+  (define (gcd-coeffs L)
+    (if (empty-termlist? L)
+        0
+        (let ((first (first-term L))
+              (rest (rest-terms L)))
+          (gcd (coeff first) (gcd-coeffs rest)))))
+  (define (div-coeffs L divisor)
+    (if (empty-termlist? L)
+        (the-empty-termlist)
+        (adjoin-term
+         (make-term
+          (order (first-term L))
+          (div (coeff (first-term L)) divisor))
+         (div-coeffs (rest-terms L) divisor))))
+  (define (div-coeffs-by-gcd L)
+    (let ((divisor (gcd-coeffs L)))
+      (div-coeffs L divisor)))
+  (define (gcd-terms a b)
+    (if (empty-termlist? b)
+        (div-coeffs-by-gcd a)
+        (gcd-terms b (pseudoremainder-terms a b))))
   'done)
 
 (install-dense-termlist-package)
@@ -526,6 +597,77 @@ add-terms and mul-terms).
                     (list q r))))))))
   (put 'div '(sparse sparse)
        (lambda (L1 L2) (map tag (div-terms L1 L2))))
+
+  ; exercise 2.94
+  (define (remainder-terms L1 L2)
+    (cadr (div-terms L1 L2)))
+
+  #| rewritten in exercise 2.96
+  (define (gcd-terms a b)
+    (if (empty-termlist? b)
+        a
+        (gcd-terms b (remainder-terms a b))))
+  |#
+  (put 'gcd '(sparse sparse)
+       (lambda (a b) (tag (gcd-terms a b))))
+
+  ; exercise 2.96
+  (define (integerizing-factor L1 L2)
+    (let ((c (coeff (first-term L2)))
+          (O1 (order-terms L1))
+          (O2 (order-terms L2)))
+      (expt c (+ 1 (- O1 O2)))))
+  (define (pseudoremainder-terms L1 L2)
+    (let ((factor (integerizing-factor L1 L2)))
+      (let ((new-dividend (mul-term-by-all-terms
+                           (make-term 0 factor)
+                           L1)))
+        (cadr (div-terms new-dividend L2)))))
+  (define (gcd-coeffs L)
+    (if (empty-termlist? L)
+        0
+        (let ((first (first-term L))
+              (rest (rest-terms L)))
+          (gcd (coeff first) (gcd-coeffs rest)))))
+  (define (div-coeffs L divisor)
+    (if (empty-termlist? L)
+        (the-empty-termlist)
+        (adjoin-term
+         (make-term
+          (order (first-term L))
+          (div (coeff (first-term L)) divisor))
+         (div-coeffs (rest-terms L) divisor))))
+  (define (div-coeffs-by-gcd L)
+    (let ((divisor (gcd-coeffs L)))
+      (div-coeffs L divisor)))
+  (define (gcd-terms a b)
+    (if (empty-termlist? b)
+        (div-coeffs-by-gcd a)
+        (gcd-terms b (pseudoremainder-terms a b))))
+
+  ; exercise 2.97
+  (define (quotient-terms L1 L2)
+    (car (div-terms L1 L2)))
+  (define (remove-redundant-factors termlists)
+    (let ((f (apply gcd (map gcd-coeffs termlists))))
+      (map (lambda (L) (div-coeffs L f)) termlists)))  
+  (define (reduce-terms n d)
+    (let ((g (gcd-terms n d)))
+      (let ((f (integerizing-factor
+                (if (< (order-terms n) (order-terms d))
+                    d
+                    n)
+                g)))
+        (let ((reduced-lists (map (lambda (L)
+                                    (quotient-terms
+                                     (mul-term-by-all-terms
+                                      (make-term 0 f)
+                                      L)
+                                     g))
+                                  (list n d))))
+          (remove-redundant-factors reduced-lists)))))
+  (put 'reduce '(sparse sparse)
+       (lambda (n d) (map tag (reduce-terms n d))))
   'done)
 
 (install-sparse-termlist-package)
@@ -537,3 +679,7 @@ add-terms and mul-terms).
   (make-sparse-polynomial 'const (list (make-term 0 n))))
 (put-coercion 'scheme-number 'polynomial
               scheme-number->polynomial)
+
+;; exercise 2.94
+(define (greatest-common-divisor a b)
+  (apply-generic 'gcd a b))

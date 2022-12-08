@@ -126,3 +126,63 @@
           (begin
             (set! init x)
             0)))))
+
+;; Exercise 3.14
+(define (mystery x)
+  (define (loop x y)
+    (if (null? x)
+        y
+        (let ((temp (cdr x)))
+          (set-cdr! x y)
+          (loop temp x))))
+  (loop x '()))
+
+#|
+mystery reverses the order of a list by mutating x. After calling mystery, x will
+become a singleton list containing (car x).
+|#
+
+;; Exercise 3.17
+(define (count-pairs x)
+  (define (traverse list visited)
+    (if (or (not (pair? list))
+            (memq list visited))
+        visited
+        (let ((visited-car (traverse (car list) (cons list visited))))
+          (traverse (cdr list) visited-car))))
+  (length (traverse x '())))
+
+;; Exercise 3.18
+(define (last-pair x)
+  (if (null? (cdr x))
+      x
+      (last-pair (cdr x))))
+
+(define (make-cycle x)
+  (set-cdr! (last-pair x) x)
+  x)
+
+(define (cycle? x)
+  (define (traverse list visited)
+    (cond ((not (pair? list)) #f)
+          ((memq list visited) #t)
+          (else
+           (traverse (cdr list) (cons list visited)))))
+  (traverse x '()))
+
+;; Exercise 3.19
+(define (jump-one list)
+    (if (pair? list)
+        (cdr list)
+        '()))
+(define (jump-two list)
+  (jump-one (jump-one list)))
+(define (cycle2? x)
+  (define (loop slow fast)
+    (cond ((or (null? fast)
+               (null? slow))
+           #f)
+          ((eq? slow fast) #t)
+          (else
+           (loop (jump-one slow) (jump-two fast)))))
+  (loop x (jump-two x)))

@@ -1,4 +1,5 @@
 #lang sicp
+(#%provide (all-defined))
 ;; Section 3.3.2 - Representing Queues
 
 (define (make-queue)

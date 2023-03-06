@@ -127,3 +127,41 @@
       (error "Denominator series cannot have zero constant term -- DIV-SERIES")
       (mul-series s1
                   (scale-stream (invert-unit-series s2) (/ 1 (stream-car s2))))))
+
+;; Exercise 3.64
+(define (stream-limit stream tolerance)
+  (let ((first (stream-ref stream 0))
+        (second (stream-ref stream 1)))
+    (if (< (abs (- first second)) tolerance)
+        second
+        (stream-limit (stream-cdr stream) tolerance))))
+
+;; Exercise 3.65
+; slowest convergence
+(define (ln2-summands n)
+  (cons-stream (/ 1.0 n)
+               (stream-map - (ln2-summands (+ n 1)))))
+(define ln2-stream
+  (partial-sums (ln2-summands 1)))
+; eight terms bound value of ln2 between 0.7595 and 0.6345
+
+; accelerated convergence
+(define (square x) (* x x))
+(define (euler-transform s)
+  (let ((s0 (stream-ref s 0))
+        (s1 (stream-ref s 1))
+        (s2 (stream-ref s 2)))
+    (cons-stream (- s2 (/ (square (- s2 s1))
+                          (+ s0 (* -2 s1) s2)))
+                 (euler-transform (stream-cdr s)))))
+; eight terms bound value of ln2 between 0.6933 and 0.6930
+
+; "super-accelerated" convergence
+(define (make-tableau transform s)
+  (cons-stream s
+               (make-tableau transform
+                             (transform s))))
+(define (accelerated-sequence transform s)
+  (stream-map stream-car
+              (make-tableau transform s)))
+; eight terms bound value of ln2 between 0.693147180560 and 0.693147180559

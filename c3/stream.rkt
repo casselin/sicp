@@ -165,3 +165,205 @@
   (stream-map stream-car
               (make-tableau transform s)))
 ; eight terms bound value of ln2 between 0.693147180560 and 0.693147180559
+
+;; Exercise 3.66
+(define (interleave s1 s2)
+  (if (stream-null? s1)
+      s2
+      (cons-stream (stream-car s1)
+                   (interleave s2 (stream-cdr s1)))))
+
+(define (pairs s t)
+  (cons-stream
+   (list (stream-car s) (stream-car t))
+   (interleave
+    (stream-map (lambda (x) (list (stream-car s) x))
+                (stream-cdr t))
+    (pairs (stream-cdr s) (stream-cdr t)))))
+
+; testing
+(define int-pairs (pairs integers integers))
+
+(define (row-1-spec? i)
+    (equal? (stream-ref int-pairs (row-1-pos i)) (list 1 i)))
+
+(define (row-1-pos i)
+    (if (= i 1)
+        0
+        (- (* 2 (- i 1)) 1)))
+
+(define (test-row-1 n)
+    (define (iter i)
+      (if (> i n)
+          'done!
+          (if (row-1-spec? i)
+              (iter (+ i 1))
+              (error "Specification failed for " i))))
+  (iter 1))
+
+(define (row-i-spec? i j)
+  (and (not (> i j))
+       (equal? (stream-ref int-pairs (row-i-pos i j)) (list i j))))
+
+(define (row-i-pos i j)
+    (define (up-row k new-pos)
+      (if (= k 1)
+          new-pos
+          (up-row (- k 1) (* 2 (+ new-pos 1)))))
+    (if (> i j)
+        (error "Pair does not exist in int-pairs" (list i j))
+        (up-row i (row-1-pos (+ (- j i) 1)))))
+
+#|
+The row-i-pos procedure produces the index corresponding to the pair (i, j)
+in the stream (pairs integers integers).
+
+The logic behind this is to first consider the substream consisting of all
+pairs (x,y) where x,y >= j, and to find the index of (i,j) in this substream.
+This is equivalent to finding the index of the pair (1,j-i+1) in the original
+stream (all pairs of the form (1,n) occur at the odd indices, except (1,1)
+which occurs at index 0). Call this index k. Then, to "raise" this index into
+the substream containing all pairs of the form with first element >= i-1, by
+computing the (k+1)th even number. Repeat this process until you have raised
+the index into the original stream.
+
+Thus, 196 pairs precede (1,100)
+
+950737950171172051122527404029 pairs precede (99,100)
+
+1267650600228229401496703205373 pairs precede (100,100)
+|#
+
+;; Exercise 3.67
+(define (all-pairs s t)
+  (cons-stream
+   (list (stream-car s) (stream-car t))
+   (interleave
+    (stream-map (lambda (x) (list (stream-car s) x))
+                (stream-cdr t))
+    (interleave
+     (stream-map (lambda (y) (list y (stream-car t)))
+                 (stream-cdr s))
+     (all-pairs (stream-cdr s) (stream-cdr t))))))
+
+;; Exercise 3.68
+#|
+This version of the pairs procedure will create an infinite loop. This is due
+to the environment model of execution attempting to evaluate the arguments
+to interleave in the body of pairs. Note that the second argument to
+interleave is the recursive call (pairs (stream-cdr s) (stream-cdr t)).
+Thus the procedure runs in an infinite loop attempting to (recursively)
+evaluate the second argument to interleave. This does not occur with the
+original definition of pairs because the recursive call occurs in the delayed
+portion of cons-stream.
+|#
+
+;; Exercise 3.69
+(define (triples s t u)
+  (cons-stream
+   (list (stream-car s) (stream-car t) (stream-car u))
+   (interleave
+    (stream-map (lambda (x) (cons (stream-car s) x))
+                (pairs t (stream-cdr u)))
+    (triples (stream-cdr s) (stream-cdr t) (stream-cdr u)))))
+
+(define pythagorean-triples
+  (stream-filter (lambda (t)
+                   (let ((i (car t))
+                         (j (cadr t))
+                         (k (caddr t)))
+                     (= (+ (square i) (square j)) (square k))))
+                 (triples integers integers integers)))
+
+;; Exercise 3.70
+(define (merge-weighted weight s1 s2)
+  (cond ((stream-null? s1) s2)
+        ((stream-null? s2) s1)
+        (else
+         (let ((s1car (stream-car s1))
+               (s2car (stream-car s2)))
+           (let ((s1carw (weight s1car))
+                 (s2carw (weight s2car)))
+             (cond ((< s1carw s2carw)
+                    (cons-stream s1car
+                                 (merge-weighted weight (stream-cdr s1) s2)))
+                   ((> s1carw s2carw)
+                    (cons-stream s2car
+                                 (merge-weighted weight s1 (stream-cdr s2))))
+                   (else
+                    (cons-stream s1car
+                                 (merge-weighted weight
+                                                 (stream-cdr s1)
+                                                 s2)))))))))
+
+(define (weighted-pairs weight s t)
+  (cons-stream
+   (list (stream-car s) (stream-car t))
+   (merge-weighted weight
+                   (stream-map (lambda (x) (list (stream-car s) x))
+                               (stream-cdr t))
+                   (weighted-pairs weight
+                                   (stream-cdr s)
+                                   (stream-cdr t)))))
+
+; a
+(define sum-int-pairs
+  (weighted-pairs (lambda (p) (+ (car p) (cadr p)))
+                  integers integers))
+
+; b
+(define non-multiples
+  (stream-filter (lambda (n)
+                   (not (or (even? n)
+                            (zero? (remainder n 3))
+                            (zero? (remainder n 5)))))
+                 integers))
+(define non-multiple-pairs
+  (weighted-pairs (lambda (p)
+                    (let ((i (car p))
+                          (j (cadr p)))
+                      (+ (* 2 i)
+                         (* 3 j)
+                         (* 5 i j))))
+                  non-multiples
+                  non-multiples))
+
+;; Exercise 3.71
+(define (cube x) (* x x x))
+(define (sum-cubes list)
+    (apply + (map cube list)))
+(define (ramanujan-numbers)
+  (define sum-cube-stream
+    (weighted-pairs sum-cubes integers integers))
+  (define (iter s)
+    (if (= (sum-cubes (stream-car s))
+           (sum-cubes (stream-car (stream-cdr s))))
+        (cons-stream (sum-cubes (stream-car s)) (iter (stream-cdr s)))
+        (iter (stream-cdr s))))
+  (iter sum-cube-stream))
+
+#|
+> (take-n-stream 6 (ramanujan-numbers))
+(1729 4104 13832 20683 32832 39312)
+|#
+
+;; Exercise 3.72
+(define (all pred list)
+  (if (null? list)
+      true
+      (and (pred (car list))
+           (all pred (cdr list)))))
+(define (sum-squares list)
+  (apply + (map square list)))
+(define (triple-sum-squares)
+  (define sum-square-stream
+    (weighted-pairs sum-squares integers integers))
+  (define (iter s)
+    (let ((weight (sum-squares (stream-car s)))
+          (candidates (take-n-stream 3 s)))
+      (if (all (lambda (p) (= (sum-squares p) weight)) (cdr candidates))
+          (cons-stream (cons weight candidates)
+                       (iter (stream-cdr s)))
+          (iter (stream-cdr s)))))
+  (iter sum-square-stream))
+          

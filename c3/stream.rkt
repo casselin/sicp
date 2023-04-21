@@ -366,4 +366,57 @@ portion of cons-stream.
                        (iter (stream-cdr s)))
           (iter (stream-cdr s)))))
   (iter sum-square-stream))
-          
+
+;; Exercise 3.73
+(define (integral integrand initial-value dt)
+  (define int
+    (cons-stream initial-value
+                 (add-streams (scale-stream integrand dt)
+                              int)))
+  int)
+
+(define (RC R C dt)
+  (lambda (i v0)
+    (add-streams (scale-stream i R)
+                 (scale-stream (integral i v0 dt) (/ 1 C)))))
+
+;; Exercise 3.74
+(define (sign-change-detector current previous)
+  (if (>= current 0)
+      (if (< previous 0) 1 0)
+      (if (>= previous 0) -1 0)))
+(define (list->stream list)
+  (if (null? list)
+      the-empty-stream
+      (cons-stream (car list)
+                   (list->stream (cdr list)))))
+(define sense-data
+  (list->stream (list 1 2 1.5 1 0.5 -0.1 -2 -3 -2 -0.5 0.2 3 4)))
+
+(define zero-crossings
+  (stream-map sign-change-detector sense-data (cons-stream 0 sense-data)))
+
+;; Exercise 3.75
+(define (make-zero-crossings input-stream last-value last-avg)
+  (let ((avpt (/ (+ (stream-car input-stream) last-value) 2)))
+    (cons-stream (sign-change-detector avpt last-avg)
+                 (make-zero-crossings (stream-cdr input-stream)
+                                      (stream-car input-stream)
+                                      avpt))))
+
+;; Exercise 3.76
+(define (smooth input-stream)
+  (if (or (stream-null? input-stream)
+          (stream-null? (stream-cdr input-stream)))
+      the-empty-stream
+      (let ((fst (stream-car input-stream))
+            (snd (stream-car (stream-cdr input-stream))))
+        (let ((avpt (/ (+ fst snd) 2)))
+          (cons-stream avpt
+                       (smooth (stream-cdr input-stream)))))))
+
+(define (make-zero-crossings-modular input-stream)
+  (define smoothed-stream (smooth input-stream))
+  (stream-map sign-change-detector
+              smoothed-stream
+              (cons-stream 0 smoothed-stream)))

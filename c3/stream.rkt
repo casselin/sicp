@@ -420,3 +420,47 @@ portion of cons-stream.
   (stream-map sign-change-detector
               smoothed-stream
               (cons-stream 0 smoothed-stream)))
+
+;; Exercise 3.77
+(define (integral-delay delayed-integrand initial-value dt)
+  (cons-stream initial-value
+               (let ((integrand (force delayed-integrand)))
+                 (if (stream-null? integrand)
+                     the-empty-stream
+                     (integral-delay (delay (stream-cdr integrand))
+                                (+ (* dt (stream-car integrand))
+                                   initial-value)
+                                dt)))))
+
+; Tweaked to work with Racket's implementation of scheme (ie. #lang sicp)
+(define (solve f y0 dt)
+  (define y (integral-delay (delay (force dy)) y0 dt))
+  (define dy (delay (stream-map f y)))
+  y)
+
+;; Exercise 3.78
+; Tweaked to work with Racket's implementation of scheme (ie. #lang sicp)
+(define (solve-2nd a b y0 dy0 dt)
+  (define y (integral-delay (delay dy) y0 dt))
+  (define dy (integral-delay (delay (force ddy)) dy0 dt))
+  (define ddy (delay (add-streams (scale-stream dy a)
+                                  (scale-stream y b))))
+  y)
+
+;; Exercise 3.79
+; Tweaked to work with Racket's implementation of scheme (ie. #lang sicp)
+(define (solve-gen-2nd f y0 dy0 dt)
+  (define y (integral-delay (delay dy) y0 dt))
+  (define dy (integral-delay (delay (force ddy)) dy0 dt))
+  (define ddy (delay (stream-map f dy y)))
+  y)
+
+;; Exercise 3.80
+(define (RLC R L C dt)
+  (lambda (vc0 il0)
+    (define vc (integral-delay (delay (force dvc)) vc0 dt))
+    (define il (integral-delay (delay (force dil)) il0 dt))
+    (define dvc (delay (scale-stream il (/ -1 C))))
+    (define dil (delay (add-streams (scale-stream il (/ (- R) L))
+                                    (scale-stream vc (/ 1 L)))))
+    (cons vc il)))

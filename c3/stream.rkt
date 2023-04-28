@@ -464,3 +464,47 @@ portion of cons-stream.
     (define dil (delay (add-streams (scale-stream il (/ (- R) L))
                                     (scale-stream vc (/ 1 L)))))
     (cons vc il)))
+
+;; Exercise 3.81
+(define random-init 1)
+(define (rand-update n)
+  (remainder (+ (* 25214903917 n) 11) (expt 2 48)))
+#|
+input-stream is a stream of messages:
+1. 'generate to produce the next random number
+2. (list 'reset n) to reset the stream of random numbers to n
+|#
+(define (rand-stream input-stream)
+  (define (iter n msg)
+    (cond ((eq? 'generate msg) (rand-update n))
+          ((and (pair? msg) (eq? 'reset (car msg)))
+           (cdr msg))
+          (else
+           (error "Bad message -- RAND-STREAM" msg))))
+  (define random-numbers
+    (cons-stream random-init
+                 (stream-map iter random-numbers input-stream)))
+  random-numbers)
+
+;; Exercise 3.82
+(define (monte-carlo experiment-stream passed failed)
+  (define (next passed failed)
+    (cons-stream
+     (/ passed (+ passed failed))
+     (monte-carlo
+      (stream-cdr experiment-stream) passed failed)))
+  (if (stream-car experiment-stream)
+      (next (+ passed 1) failed)
+      (next passed (+ failed 1))))
+
+(define (randoms-in-range low high)
+  (let ((range (- high low)))
+    (cons-stream (+ low (random range))
+                 (randoms-in-range low high))))
+
+(define (estimate-integral P x1 x2 y1 y2)
+  (let ((xs (randoms-in-range x1 x2))
+        (ys (randoms-in-range y1 y2))
+        (area (* (- x2 x1) (- y2 y1))))
+    (let ((experiments (stream-map P xs ys)))
+      (scale-stream (monte-carlo experiments 0 0) area))))

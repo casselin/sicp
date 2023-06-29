@@ -27,6 +27,8 @@
         ((do? exp) (eval (do->named-let exp) env))
         ;; exercise 4.13
         ((make-unbound!? exp) (eval-unbind exp env))
+        ;; exercise 4.20
+        ((letrec? exp) (eval (letrec->let exp) env))
         ((application? exp)
          (my-apply (eval (operator exp) env)
                    (list-of-values (operands exp) env)))
@@ -489,7 +491,8 @@ Examples:
 
 ; Representing procedures
 (define (make-procedure parameters body env)
-  (list 'procedure parameters body env))
+  ; modified by 4.16c
+  (list 'procedure parameters (scan-out-defines body) env))
 (define (compound-procedure? p)
   (tagged-list? p 'procedure))
 (define (procedure-parameters p) (cadr p))
@@ -556,7 +559,12 @@ of no arguments to be called if the variable is not found in the environment.
 
 (define (lookup-variable-value var env)
   (env-loop env var
-            (lambda (f) (cdr (car f)))
+            ;; modified by exercise 4.16a
+            (lambda (f) (let ((value (cdar f)))
+                           (if (eq? value '*unassigned*)
+                               (error "Unassigned variable:" var)
+                               value)))
+            ;
             (lambda () (error "Unbound variable" var))))
 
 (define (define-variable! var val env)
@@ -687,3 +695,180 @@ if (try try) returns 'halted, then (halts? try try) returns false. This
 implies that (try try) does not halt, which is also a contraction. Therefore
 the procedure halts? cannot exist.
 |#
+
+;; Exercise 4.16
+; b
+(define (bifurcate predicate list)
+  (define (go list cont)
+    (if (null? list)
+        (cont (cons '() '()))
+        (let ((first (car list))
+              (rest (cdr list)))
+          (if (predicate first)
+              (go rest (lambda (p)
+                         (cont (cons (cons first (car p))
+                                     (cdr p)))))
+              (go rest (lambda (p)
+                         (cont (cons (car p)
+                                     (cons first (cdr p))))))))))
+  (go list identity))
+
+(define (scan-out-defines body)
+  (let ((split (bifurcate definition? body)))
+    (let ((defines (car split))
+          (rest (cdr split)))
+      (if (null? defines)
+          body
+          (list (make-let
+                 (map (lambda (d) (list (definition-variable d) ''*unassigned*))
+                      defines)
+                 (append (map (lambda (d) (list
+                                           'set! (definition-variable d)
+                                           (definition-value d)))
+                              defines)
+                         rest)))))))
+; c
+#|
+I believe this is better installed in make-procedure because I can foresee
+expansions to the evaluator where procedure-body is called more often than
+make-procedure, which makes it more efficient to do the work inside
+make-procedure. If this assumption proves incorrect, then it would be better
+to install it in procedure-body.
+|#
+
+;; Exercise 4.17
+#|
+The transformed program has an extra frame because the let expression
+evaluates an additional lambda procedure, which creates a frame to perform
+the procedure. This difference will not change the behaviour of a correctly
+structured program because in both cases, the expression <e3> will be evaluated
+within (or extended from) the frame containing all the internally defined
+variables. Thus <e3> will have access to the variables when needed.
+Furthermore, all internally defined variables will be set before being
+accessed by <e3> due to the sequential nature of procedure body evaluation.
+
+To achieve the same result without constructing the extra frame, a lambda
+procedure could be transformed so that all internally defined variables become
+parameters of the procedure, and when called, these parameters receive the
+value of *unassigned* and the procedure body begins by setting these variables
+to the proper values.
+To illustrate, the procedure
+(lambda <vars>
+  (define u <e1>)
+  (define v <e2>)
+  <e3>)
+
+would be transformed into
+(lambda (<vars> u v)
+  (set! u <e1>)
+  (set! v <e2>)
+  <e3>)
+
+And whenever this procedure is called, the evaluator would have to add the
+additional arguments of *unassigned* for both u and v.
+|#
+
+;; Exercise 4.18
+#|
+The procedure bound to solve using the strategy proposed in the exercise is:
+(lambda (f y0 dt)
+  (let ((y *unassigned*)
+        (dy *unassigned*))
+    (let ((a (integral (delay dy) y0 dt))
+          (b (stream-map f y)))
+      (set! y a)
+      (set! dy b))
+    y))
+This procedure will not work; there will be no issue in evaluating the
+argument that will be bound to a because although the value of dy at that
+time will be *unassigned*, its access is deferred through use of the delay
+special form. The problem occurs when the evaluator evaluates the value for b;
+it will perform a lookup for the value of y. At this stage in evaluation, y
+is still bound to the value *unassigned*, which will signal an error in the
+lookup-variable-value procedure.
+This problem does not occur using the strategy proposed in the text, since
+when the expression (set! dy (stream-map f y)) is evaluated, the value of y
+has already been set to (integral (delay dy) y0 dt)) which is a well-defined
+value in the environment.
+|#
+
+;; Exercise 4.19
+#|
+I can see a case for and against each argument:
+Ben: based on the structure of the example code, it appears that this
+interpretation is the intended behaviour (or else why would the author
+place the definition of a after it is used?). However, it is still possible
+that this is not the case. Since there is confusion in the intent, I would
+say that this example illustrates an odious programming style and should not
+be accounted for.
+
+Eva: I agree with Eva in principle because this would be the technical
+definition of the simultaneous scope rule. However, as mentioned in the
+footnote, implementing the rule is difficult: the issue in the example
+occurs because of the order in which the variable values are evaluated.
+A possible mechanism to fix this would be to search all internal definition
+value expressions for variables that are internally defined. When placing
+the corresponding set! procedures to give each variable its value, they will
+be ordered such that any value expression that references another internally
+defined variable will be placed after that variable's set! procedure.
+Unfortunately, this will fail when the definitions are circular.
+
+Alyssa: For the reasons discussed above, I agree with Alyssa's view for
+practical considerations. Since this programming style is most likely odious,
+I think it is better to point the programmer to this rather than to return a
+'valid' value.
+|#
+
+;; Exercise 4.20
+;a
+(define (letrec? exp) (tagged-list? exp 'letrec))
+(define (letrec-bindings exp) (cadr exp))
+(define (letrec-parameters exp)
+  (map car (letrec-bindings exp)))
+(define (letrec-arguments exp)
+  (map cadr (letrec-bindings exp)))
+(define (letrec-body exp) (cddr exp))
+(define (letrec->let exp)
+  (let ((vars (letrec-parameters exp))
+        (vals (letrec-arguments exp)))
+    (let ((new-bindings (map (lambda (v) (list v ''*unassigned*))
+                             vars))
+          (new-body (append
+                     (map (lambda (var val) (list 'set! var val))
+                          vars vals)
+                     (letrec-body exp))))
+      (make-let new-bindings new-body))))
+;b
+#|
+When using letrec, the procedures for even? and odd? are evaluated in the
+frame generated by the letrec: thus each procedure's associated environment
+contains the necessary variables for lookup.
+If letrec is replaced by let, the procedures must be evaluated BEFORE the
+let frame is created. Thus each procedure's associated environment is the
+same environment as f. That is, the procedures are bound to the let
+expression's enclosing environment. This means that the procedures will
+fail to lookup the necessary variables (ie. even? and odd?) and produce
+an error.
+|#
+
+;; Exercise 4.21
+;a
+(define (fibonacci n)
+  ((lambda (n)
+     ((lambda (fib)
+        (fib fib n))
+      (lambda (fb k)
+        (cond ((= k 0) 0)
+              ((= k 1) 1)
+              (else (+ (fb fb (- k 1))
+                       (fb fb (- k 2))))))))
+   n))
+
+;b
+(define (f x)
+  ((lambda (even? odd?)
+     (even? even? odd? x))
+   (lambda (ev? od? n)
+     (if (= n 0) true (od? ev? od? (- n 1))))
+   (lambda (ev? od? n)
+     (if (= n 0) false (ev? ev? od? (- n 1))))))

@@ -1,5 +1,5 @@
 #lang sicp
-
+(#%provide (all-defined))
 ;;; Section 4.1 The Metacircular Evaluator
 (define (eval exp env)
   (cond ((self-evaluating? exp) exp)
@@ -377,13 +377,6 @@ cond as a special form seems to be the best way to avoid both issues.
           (else
            (make-let (list (first-binding bindings))
                      (list (iter (rest-bindings bindings)))))))
-  #|
-  (define (iter bindings)
-    (if (null? bindings)
-        (let-body exp)
-        (make-let (list (first-binding bindings))
-                  (iter (rest-bindings bindings)))))
-  |#
   (iter (let-bindings exp)))
 #|
 Adding a clause that performs (eval (let*->nested-lets exp) env) is
@@ -493,6 +486,10 @@ Examples:
 (define (make-procedure parameters body env)
   ; modified by 4.16c
   (list 'procedure parameters (scan-out-defines body) env))
+#|
+(define (make-procedure parameters body env)
+  (list 'procedure parameters body env))
+|#
 (define (compound-procedure? p)
   (tagged-list? p 'procedure))
 (define (procedure-parameters p) (cadr p))
@@ -534,15 +531,6 @@ of no arguments to be called if the variable does not exist in the frame.
         (if (eq? var (caar bindings))
             (found-op bindings)
             (iter (cdr bindings))))))
-#|
-(define (scan frame var found-op null-op)
-  (if (null? frame)
-      (null-op)
-      (let ((first-binding (car frame)))
-        (if (eq? var (car first-binding))
-            (found-op frame)
-            (scan (cdr frame) var found-op null-op)))))
-|#
 #|
 env-loop takes an environment and a variable as an argument, followed
 by a procedure of one argument to be called with the remainder of the frame
@@ -631,6 +619,10 @@ to cond clauses in the eval procedure
         (list '* *)
         (list '/ /)
         (list '= =)
+        (list '< <)
+        (list '<= <=)
+        (list '> >)
+        (list '>= >=)
         (list 'list list)
         (list 'not not)
         (list 'equal? equal?)
@@ -872,3 +864,90 @@ an error.
      (if (= n 0) true (od? ev? od? (- n 1))))
    (lambda (ev? od? n)
      (if (= n 0) false (ev? ev? od? (- n 1))))))
+
+#|
+;;; 4.1.7 Separating Syntactic Analysis from Execution
+(define (eval exp env)
+  ((analyze exp) env))
+
+(define (analyze exp)
+  (cond ((self-evaluating? exp)
+         (analyze-self-evaluating exp))
+        ((quoted? exp) (analyze-quoted exp))
+        ((variable? exp) (analyze-variable exp))
+        ((assignment? exp) (analyze-assignment exp))
+        ((definition? exp) (analyze-definition exp))
+        ((if? exp) (analyze-if exp))
+        ((lambda? exp) (analyze-lambda exp))
+        ((begin? exp) (analyze-sequence (begin-actions exp)))
+        ((cond? exp) (analyze (cond->if exp)))
+        ;; Exercise 4.22
+        ((let? exp) (analyze (let->combination exp)))
+        ;
+        ((application? exp) (analyze-application exp))
+        (else
+         (error "Unknown expression type -- ANALYZE" exp))))
+
+(define (analyze-self-evaluating exp)
+  (lambda (env) exp))
+(define (analyze-quoted exp)
+  (let ((qval (text-of-quotation exp)))
+    (lambda (env) qval)))
+(define (analyze-variable exp)
+  (lambda (env) (lookup-variable-value exp env)))
+(define (analyze-assignment exp)
+  (let ((var (assignment-variable exp))
+        (vproc (analyze (assignment-value exp))))
+    (lambda (env)
+      (set-variable-value! var (vproc env) env)
+      'ok)))
+(define (analyze-definition exp)
+  (let ((var (definition-variable exp))
+        (vproc (analyze (definition-value exp))))
+    (lambda (env)
+      (define-variable! var (vproc env) env)
+      'ok)))
+(define (analyze-if exp)
+  (let ((pproc (analyze (if-predicate exp)))
+        (cproc (analyze (if-consequent exp)))
+        (aproc (analyze (if-alternative exp))))
+    (lambda (env)
+      (if (true? (pproc env))
+          (cproc env)
+          (aproc env)))))
+(define (analyze-lambda exp)
+  (let ((vars (lambda-parameters exp))
+        (bproc (analyze-sequence (lambda-body exp))))
+    (lambda (env) (make-procedure vars bproc env))))
+(define (analyze-sequence exps)
+  (define (sequentially proc1 proc2)
+    (lambda (env) (proc1 env) (proc2 env)))
+  (define (loop first-proc rest-procs)
+    (if (null? rest-procs)
+        first-proc
+        (loop (sequentially first-proc (car rest-procs))
+              (cdr rest-procs))))
+  (let ((procs (map analyze exps)))
+    (if (null? procs)
+        (error "Empty sequence -- ANALYZE"))
+    (loop (car procs) (cdr procs))))
+(define (analyze-application exp)
+  (let ((fproc (analyze (operator exp)))
+        (aprocs (map analyze (operands exp))))
+    (lambda (env)
+      (execute-application (fproc env)
+                           (map (lambda (aproc) (aproc env))
+                                aprocs)))))
+(define (execute-application proc args)
+  (cond ((primitive-procedure? proc)
+         (apply-primitive-procedure proc args))
+        ((compound-procedure? proc)
+         ((procedure-body proc)
+          (extend-environment (procedure-parameters proc)
+                              args
+                              (procedure-environment proc))))
+        (else
+         (error
+          "Unknown procedure type -- EXECUTE-APPLICATION"
+          proc))))
+|#

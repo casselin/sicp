@@ -1,4 +1,5 @@
 #lang sicp
+(#%provide (all-defined))
 ;;; Section 4.1 The Metacircular Evaluator
 (define (eval exp env)
   (cond ((self-evaluating? exp) exp)

@@ -28,13 +28,28 @@
 
 (define (variable? exp) (symbol? exp))
 
-(define (quoted? exp)
-  (tagged-list? exp 'quote))
-(define (text-of-quotation exp) (cadr exp))
 (define (tagged-list? exp tag)
   (if (pair? exp)
       (eq? (car exp) tag)
       false))
+
+(define (quoted? exp)
+  (tagged-list? exp 'quote))
+(define (text-of-quotation exp) (cadr exp))
+;; Exercise 4.33
+(define (eval-quote exp env)
+  (let ((q (text-of-quotation exp)))
+    (if (or (null? q)
+            (not (pair? q)))
+        q
+        (eval (convert-quoted-list q) env))))
+(define (convert-quoted-list q)
+  (if (null? q)
+      (quote '())
+      (list 'cons
+            (list 'quote (car q))
+            (convert-quoted-list (cdr q)))))
+;
 
 (define (assignment? exp)
   (tagged-list? exp 'set!))
@@ -239,9 +254,9 @@
 
 (define (primitive-implementation proc) (cadr proc))
 (define primitive-procedures
-  (list (list 'car car)
-        (list 'cdr cdr)
-        (list 'cons cons)
+  (list (list 'underlying-car car)
+        (list 'underlying-cdr cdr)
+        (list 'underlying-cons cons)
         (list 'null? null?)
         (list '+ +)
         (list '- -)
@@ -279,18 +294,6 @@
     (define-variable! 'true true initial-env)
     (define-variable! 'false false initial-env)
     initial-env))
-
-(define (prompt-for-input string)
-  (newline) (newline) (display string) (newline))
-(define (announce-output string)
-  (newline) (display string) (newline))
-(define (user-print object)
-  (if (compound-procedure? object)
-      (display (list 'compound-procedure
-                     (procedure-parameters object)
-                     (procedure-body object)
-                     '<procedure-env>))
-      (display object)))
 
 ;;; 4.2 Lazy Evaluation
 
@@ -356,11 +359,28 @@ This couldn't be done if unless was a special form/derived expression.
       (eval (if-consequent exp) env)
       (eval (if-alternative exp) env)))
 
+(define (prompt-for-input string)
+  (newline) (newline) (display string) (newline))
+(define (announce-output string)
+  (newline) (display string) (newline))
+
+(define input-prompt ";;; L-Eval input:")
+(define output-prompt ";;; L-Eval value:")
+(define (driver-loop)
+  (prompt-for-input input-prompt)
+  (let ((input (read)))
+    (let ((output
+           (actual-value input the-global-environment)))
+      (announce-output output-prompt)
+      (user-print output)))
+  (driver-loop))
+
 ; redefined here because of the modification to the application? clause
 (define (eval exp env)
   (cond ((self-evaluating? exp) exp)
         ((variable? exp) (lookup-variable-value exp env))
-        ((quoted? exp) (text-of-quotation exp))
+        ;; exercise 4.33
+        ((quoted? exp) (eval-quote exp env))
         ((assignment? exp) (eval-assignment exp env))
         ((definition? exp) (eval-definition exp env))
         ((if? exp) (eval-if exp env))
@@ -380,19 +400,6 @@ This couldn't be done if unless was a special form/derived expression.
                  env))
         (else
          (error "Unknown expression type -- EVAL" exp))))
-
-(define the-global-environment (setup-environment))
-
-(define input-prompt ";;; L-Eval input:")
-(define output-prompt ";;; L-Eval value:")
-(define (driver-loop)
-  (prompt-for-input input-prompt)
-  (let ((input (read)))
-    (let ((output
-           (actual-value input the-global-environment)))
-      (announce-output output-prompt)
-      (user-print output)))
-  (driver-loop))
 
 ; Representing thunks
 (define (delay-it exp env)
@@ -530,3 +537,94 @@ only be relied upon for their return values, not for effects they may produce
 does seem reasonable since it does not negatively impact Ben's somewhat more
 sensible use of side effects in a lazy procedure.
 |#
+
+;;; Streams as Lazy Lists
+(define the-global-environment (setup-environment))
+
+;; Installing lazy list procedures into the evaluator
+
+;; Exercise 4.34
+#|
+print-lazy-pair has a limit argument to set how many elements
+of a list to print (currently set to 20).
+|#
+(eval-definition '(define (cons x y)
+                    (underlying-cons 'lazy-pair (lambda (m) (m x y))))
+                 the-global-environment)
+(eval-definition '(define (car z)
+                    ((underlying-cdr z) (lambda (p q) p)))
+                 the-global-environment)
+(eval-definition '(define (cdr z)
+                    ((underlying-cdr z) (lambda (p q) q)))
+                 the-global-environment)
+
+(define (lazy-pair? exp) (tagged-list? exp 'lazy-pair))
+
+(define (print-lazy-pair obj limit)
+  (define (lazy-car z)
+    (force-it (lookup-variable-value 'x (procedure-environment (cdr z)))))
+  (define (lazy-cdr z)
+    (force-it (lookup-variable-value 'y (procedure-environment (cdr z)))))
+  (if (lazy-pair? obj)
+      (if (= limit 0)
+          ". ."
+          (cons (lazy-car obj)
+                (print-lazy-pair (lazy-cdr obj) (- limit 1))))
+      obj))
+(define list-print-limit 20)
+(define (user-print object)
+  (cond ((compound-procedure? object)
+         (display (list 'compound-procedure
+                        (procedure-parameters object)
+                        (procedure-body object)
+                        '<procedure-env>)))
+        ((lazy-pair? object)
+         (display (print-lazy-pair object list-print-limit)))
+        (else (display object))))
+
+#| deprecated by exercise 4.34
+(eval-definition '(define (cons x y)
+                    (lambda (m) (m x y)))
+                 the-global-environment)
+(eval-definition '(define (car z)
+                    (z (lambda (p q) p)))
+                 the-global-environment)
+(eval-definition '(define (cdr z)
+                    (z (lambda (p q) q)))
+                 the-global-environment)
+|#
+(eval-definition '(define (list-ref items n)
+                    (if (= n 0)
+                        (car items)
+                        (list-ref (cdr items) (- n 1))))
+                 the-global-environment)
+(eval-definition '(define (map proc items)
+                    (if (null? items)
+                        '()
+                        (cons (proc (car items))
+                              (map proc (cdr items)))))
+                 the-global-environment)
+(eval-definition '(define (scale-list items factor)
+                    (map (lambda (x) (* x factor))
+                         items))
+                 the-global-environment)
+(eval-definition '(define (add-lists list1 list2)
+                    (cond ((null? list1) list2)
+                          ((null? list2) list1)
+                          (else (cons (+ (car list1) (car list2))
+                                      (add-lists (cdr list1) (cdr list2))))))
+                 the-global-environment)
+
+(eval-definition '(define ones (cons 1 ones))
+                 the-global-environment)
+(eval-definition '(define integers (cons 1 (add-lists ones integers)))
+                 the-global-environment)
+
+;; Exercise 4.32
+#|
+When the car of the list was strict, we were limited to infinite objects of
+one dimension (ie. sequences). Now that the car is lazy, we can create objects
+of more than one dimension, in particular an infinite matrix.
+|#
+(eval-definition '(define ones-matrix (cons ones ones-matrix))
+                 the-global-environment)

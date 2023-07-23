@@ -369,4 +369,225 @@ This is indeed a faster version, since the search for a suitable integer k
 does not take place.
 |#
 
+;; Exercise 4.38
+(define (distinct? items)
+    (cond ((null? items) true)
+          ((null? (cdr items)) true)
+          ((member (car items) (cdr items)) false)
+          (else (distinct? (cdr items)))))
+
+(define (multiple-dwelling)
+    (let ((baker (amb 1 2 3 4 5))
+          (cooper (amb 1 2 3 4 5))
+          (fletcher (amb 1 2 3 4 5))
+          (miller (amb 1 2 3 4 5))
+          (smith (amb 1 2 3 4 5)))
+      (require
+        (distinct? (list baker cooper fletcher miller smith)))
+      (require (not (= baker 5)))
+      (require (not (= cooper 1)))
+      (require (not (= fletcher 5)))
+      (require (not (= fletcher 1)))
+      (require (> miller cooper))
+      (require (not (= (abs (- fletcher cooper)) 1)))
+      (list (list 'baker baker)
+            (list 'cooper cooper)
+            (list 'fletcher fletcher)
+            (list 'miller miller)
+            (list 'smith smith))))
+#|
+There are 5 solutions to the modified puzzle, as one can type try-again 4
+times before a fail state is reached.
+|#
+
+;; Exercise 4.39
+#|
+The order of the restrictions should not matter, since the conditions are all
+combined with the logical AND operator. I believe the order of the restrictions
+does impact the time to find an answer. Currently, the distinct? condition is
+performed first, but takes the longest to compute. It is possible to filter
+out some of the choices using any of the cheaper requirements first. Thus in
+many cases the program won't perform the most expensive requirements check.
+A faster version would then be:
+|#
+(define (faster-multiple-dwelling)
+    (let ((baker (amb 1 2 3 4 5))
+          (cooper (amb 1 2 3 4 5))
+          (fletcher (amb 1 2 3 4 5))
+          (miller (amb 1 2 3 4 5))
+          (smith (amb 1 2 3 4 5)))
+      (require (not (= baker 5)))
+      (require (not (= cooper 1)))
+      (require (not (= fletcher 5)))
+      (require (not (= fletcher 1)))
+      (require (> miller cooper))
+      (require (not (= (abs (- fletcher smith)) 1)))
+      (require (not (= (abs (- fletcher cooper)) 1)))
+      (require
+        (distinct? (list baker cooper fletcher miller smith)))
+      (list (list 'baker baker)
+            (list 'cooper cooper)
+            (list 'fletcher fletcher)
+            (list 'miller miller)
+            (list 'smith smith))))
+
+;; Exercise 4.40
+#|
+Before the distinct requirement, there at 5^5 sets of assignments. After
+eliminating those that are not distinct, 5! sets remain.
+|#
+(define (fastest-multiple-dwelling)
+  (let ((fletcher (amb 1 2 3 4 5)))
+    (require (not (= fletcher 1)))
+    (require (not (= fletcher 5)))
+    (let ((cooper (amb 1 2 3 4 5)))
+      (require (not (= cooper 1)))
+      (require (not (<= (abs (- fletcher cooper)) 1)))
+      (let ((smith (amb 1 2 3 4 5)))
+        (require (not (= smith cooper)))
+        (require (not (<= (abs (- fletcher smith)) 1)))
+        (let ((miller (amb 1 2 3 4 5)))
+          (require (not (= miller fletcher)))
+          (require (not (= miller smith)))
+          (require (> miller cooper))
+          (let ((baker (amb 1 2 3 4 5)))
+            (require (not (= baker 5)))
+            (require (not (= baker fletcher)))
+            (require (not (= baker cooper)))
+            (require (not (= baker smith)))
+            (require (not (= baker miller)))
+            (list (list 'baker baker)
+                  (list 'cooper cooper)
+                  (list 'fletcher fletcher)
+                  (list 'miller miller)
+                  (list 'smith smith))))))))
+
+;; Exercise 4.41
+(define (filter pred sequence)
+  (cond ((null? sequence) '())
+        ((pred (car sequence))
+         (cons (car sequence)
+               (filter pred (cdr sequence))))
+        (else (filter pred (cdr sequence)))))
+(define (accumulate op initial sequence)
+  (if (null? sequence)
+      initial
+      (op (car sequence)
+          (accumulate op initial (cdr sequence)))))
+(define (flatmap proc seq)
+  (accumulate append '() (map proc seq)))
+(define (permutations s)
+  (if (null? s)
+      '(())
+      (flatmap (lambda (x)
+                 (map (lambda (p) (cons x p))
+                      (permutations (filter (lambda (y) (not (equal? x y)))
+                                            s))))
+               s)))
+
+(define (multiple-dwelling-no-amb)
+  (define (requirements? tenants)
+    (let ((baker (car tenants))
+          (cooper (cadr tenants))
+          (fletcher (caddr tenants))
+          (miller (cadddr tenants))
+          (smith (car (cddddr tenants))))
+      (and (not (= baker 5))
+           (not (= cooper 1))
+           (not (= fletcher 1))
+           (not (= fletcher 5))
+           (> miller cooper)
+           (not (= (abs (- fletcher smith)) 1))
+           (not (= (abs (- fletcher cooper)) 1)))))
+  (map list '(baker cooper fletcher miller smith)
+       (car (filter requirements? (permutations '(1 2 3 4 5))))))
+
+;; Exercise 4.42
+#|
+Can also be done using amb on the requirements, but interplay between Kitty
+and Mary's statements gets tricky
+|#
+(define (xor p q)
+  (or (and p (not q))
+      (and (not p) q)))
+(define (liars-puzzle)
+  (let ((betty (amb 1 2 3 4 5))
+        (ethel (amb 1 2 3 4 5))
+        (joan (amb 1 2 3 4 5))
+        (kitty (amb 1 2 3 4 5))
+        (mary (amb 1 2 3 4 5)))
+    (require (xor (= kitty 2) (= betty 3)))
+    (require (xor (= ethel 1) (= joan 2)))
+    (require (xor (= joan 3) (= ethel 5)))
+    (require (xor (= kitty 2) (= mary 4)))
+    (require (xor (= mary 4) (= betty 1)))
+    (require (distinct? (list betty ethel joan kitty mary)))
+    (list (list 'betty betty)
+          (list 'ethel ethel)
+          (list 'joan joan)
+          (list 'kitty kitty)
+          (list 'mary mary))))
+
+;; Exercise 4.43
+(define (yacht-puzzle)
+  (define fathers '(*fathers* mr-moore col-downing mr-hall sir-barnacle dr-parker))
+  (define yachts '(*yachts* lorna melissa rosalind gabrielle mary-ann))
+  (let ((melissa (list 'melissa 4))
+        (mary-ann (list 'mary-ann (amb 1 2 3 4 5)))) ;modified by exercise
+    (require (not (= (cadr mary-ann) (cadr melissa))))
+    (let ((lorna (list 'lorna (amb 1 2 3 4 5))))
+      (require (not (= (cadr lorna) (cadr melissa))))
+      (require (not (= (cadr lorna) (cadr mary-ann))))
+      (require (not (= (cadr lorna) 1)))
+      (let ((rosalind (list 'rosalind (amb 1 2 3 4 5))))
+        (require (not (= (cadr rosalind) (cadr melissa))))
+        (require (not (= (cadr rosalind) (cadr mary-ann))))
+        (require (not (= (cadr rosalind) (cadr lorna))))
+        (require (not (= (cadr rosalind) 3)))
+        (let  ((gabrielle (list 'gabrielle (amb 1 2 3 4 5))))
+          (require (not (= (cadr gabrielle) (cadr melissa))))
+          (require (not (= (cadr gabrielle) (cadr mary-ann))))
+          (require (not (= (cadr gabrielle) (cadr lorna))))
+          (require (not (= (cadr gabrielle) (cadr rosalind))))
+          (require (equal?
+                    (list-ref yachts (cadr gabrielle))
+                    (caar (filter
+                           (lambda (d) (= (cadr d) 5))
+                           (list mary-ann gabrielle lorna rosalind melissa)))))
+          (list-ref fathers (cadr lorna)))))))
+#|
+Lorna's father is Colonel Downing. If you ignore Mary Ann's last name there
+are 2 solutions: Colonel Downing, and Dr. Parker.
+|#
+
+;; Exercise 4.44
+(define (make-pos row col)
+  (cons row col))
+(define (pos-row pos)
+  (car pos))
+(define (pos-col pos)
+  (cdr pos))
+(define empty-board '())
+(define (adjoin-position row col positions)
+  (cons (make-pos row col) positions))
+(define (safe? col positions)
+  (let ((row (pos-row (car positions)))
+        (rest (cdr positions))) ; first position is the new queen
+    (accumulate (lambda (x y)
+                  (and (not (= row (pos-row x)))
+                       (not (= (abs (- row (pos-row x)))
+                               (abs (- col (pos-col x)))))
+                       y))
+                true
+                rest)))
+(define (queens board-size)
+  (define (queen-cols k)
+    (if (= k 0)
+        empty-board
+        (let ((rest-queens (queen-cols (- k 1)))
+              (new-row (an-integer-between 1 board-size)))
+          (let ((new-board (adjoin-position new-row k rest-queens)))
+            (require (safe? k new-board))
+            new-board))))
+  (queen-cols board-size))
 (define the-global-environment (setup-environment))

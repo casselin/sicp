@@ -591,3 +591,117 @@ are 2 solutions: Colonel Downing, and Dr. Parker.
             new-board))))
   (queen-cols board-size))
 (define the-global-environment (setup-environment))
+
+;; Exercise 4.46
+#|
+If the operands were not evaluated from left to right, calls to parse-word
+(through the procedures parse-noun-phrase or parse-verb-phrase) would occur
+in an unintended order. For instance, to evaluate parse-noun-phrase,
+(parse-word nouns) would be evaluated before (parse-word articles), which
+would result in parsing failure since, presumably, the next word in the
+*unparsed* list would be an article and not a noun.
+|#
+
+;; Exercise 4.47
+#|
+Louis' version of parse-verb-phrase will get stuck in an infinite loop in
+the case where the next word to be parsed is not a verb. If the next word
+is not a verb, this will cause a failure condition in the amb expression
+inside parse-verb-phrase. This triggers the selection of the second
+argument. However, the second argument calls parse-verb-phrase again,
+causing another amb expression that attempts to parse a verb. This process
+will repeat infinitely.
+Changing the order of the expressions inside the amb will not change the
+behaviour, it will still enter an infinite loop. 
+|#
+
+(define nouns '(noun student professor cat class))
+(define verbs '(verb studies lectures eats sleeps))
+(define articles '(article the a))
+(define prepositions '(prep for to in by with))
+
+#|
+(define (parse-simple-noun-phrase)
+  (list 'simple-noun-phrase
+        (parse-word articles)
+        (parse-word nouns)))
+|#
+(define (parse-noun-phrase)
+  (define (maybe-extend noun-phrase)
+    (amb noun-phrase
+         (maybe-extend (list 'noun-phrase
+                             noun-phrase
+                             (parse-prepositional-phrase)))))
+  (maybe-extend (parse-simple-noun-phrase)))
+(define (parse-prepositional-phrase)
+  (list 'prep-phrase
+        (parse-word prepositions)
+        (parse-noun-phrase)))
+
+(define (parse-verb-phrase)
+  (define (maybe-extend verb-phrase)
+    (amb verb-phrase
+         (maybe-extend (list 'verb-phrase
+                             verb-phrase
+                             (parse-prepositional-phrase)))))
+  (maybe-extend (parse-word verbs)))
+
+#| redefined in exercise 4.49 to generate words
+(define (parse-word word-list)
+  (require (not (null? *unparsed*)))
+  (require (memq (car *unparsed*) (cdr word-list)))
+  (let ((found-word (car *unparsed*)))
+    (set! *unparsed* (cdr *unparsed*))
+    (list (car word-list) found-word)))
+|#
+
+(define *unparsed* '())
+
+(define (parse input)
+  (set! *unparsed* input)
+  (let ((sent (parse-sentence)))
+    (require (null? *unparsed*))
+    sent))
+
+;; Exercise 4.48
+(define conjunctions '(conjunction but and or yet))
+(define adjectives '(smart boring adorable))
+
+(define (parse-simple-noun-phrase)
+  (let ((article (parse-word articles)))
+    (amb (list 'simple-noun-phrase
+               article
+               (parse-word nouns))
+         (list 'adjective-noun-phrase
+               article
+               (parse-word adjectives)
+               (parse-word nouns)))))
+
+(define (parse-simple-sentence)
+  (list 'sentence
+        (parse-noun-phrase)
+        (parse-verb-phrase)))
+
+(define (parse-sentence)
+  (define (maybe-extend sentence)
+    (amb sentence
+         (maybe-extend (list 'compound-sentence
+                             sentence
+                             (parse-word conjunctions)
+                             (parse-simple-sentence)))))
+  (maybe-extend (parse-simple-sentence)))
+
+;; Exercise 4.49
+(define (parse-word word-list)
+  (define (choose-word words)
+    (require (not (null? words)))
+    (amb (car words) (choose-word (cdr words))))
+  (require (not (null? *unparsed*)))
+  (set! *unparsed* (cdr *unparsed*))
+  (list (car word-list) (choose-word (cdr word-list))))
+#|
+(sentence (simple-noun-phrase (article the) (noun student)) (verb studies))
+(sentence (simple-noun-phrase (article the) (noun student)) (verb lectures))
+(sentence (simple-noun-phrase (article the) (noun student)) (verb eats))
+(sentence (simple-noun-phrase (article the) (noun student)) (verb sleeps))
+|#

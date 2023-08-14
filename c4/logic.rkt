@@ -163,10 +163,31 @@ the stream.
 To detect the simple loops described in the text and Exercise 4.64 it is
 enough to detect when a query is the same as a previous rule application.
 Thus the history will be a list of rule conclusions, instantiated with the
-values from the extended frame after unification succeeds. It will be the job
-of the matcher/unifier to update the history and the job of the main evaluator
-to check new queries against the history for potential loops.
+values from the extended frame after unification succeeds. Checking and
+updating the history will be done by apply-a-rule (previously I thought
+qeval would be best for this, but since rule applications are what will
+cause these infinite loops many checks would be done pointlessly by qeval).
 |#
+(define (new-history) '())
+(define (in-history? entry history)
+  (member entry history))
+(define (make-history-entry pattern frame)
+  (instantiate pattern
+               frame
+               (lambda (v f)
+                 (canonicalize-variable v))))
+(define (extend-history entry history)
+  (cons entry history))
+(define (canonicalize-variable var)
+  (string->symbol
+   (string-append "?"
+    (if (number? (cadr var))
+        (symbol->string (caddr var))
+        (symbol->string (cadr var))))))
+(define (display-loop-notification pattern)
+  (newline)
+  (display "Loop detected on pattern: ")
+  (display pattern))
 
 ;; Exercise 4.68
 #|
@@ -225,7 +246,7 @@ issues of infinite loops.
                             frame
                             (lambda (v f)
                               (contract-question-mark v))))
-             (qeval q (singleton-stream '()))))
+             (qeval q (singleton-stream '()) (new-history))))
            (query-driver-loop)))))
 
 (define (instantiate exp frame unbound-var-handler)
@@ -242,54 +263,58 @@ issues of infinite loops.
 
 ;;; The Evaluator
 
-(define (qeval query frame-stream)
+(define (qeval query frame-stream history)
   (let ((qproc (get (type query) 'qeval)))
     (if qproc
-        (qproc (contents query) frame-stream)
-        (simple-query query frame-stream))))
+        (qproc (contents query) frame-stream history)
+        (simple-query query frame-stream history))))
 
 ;; Simple queries
 
-(define (simple-query query-pattern frame-stream)
+(define (simple-query query-pattern frame-stream history)
   (stream-flatmap
    (lambda (frame)
      (stream-append-delayed
       (find-assertions query-pattern frame)
-      (delay (apply-rules query-pattern frame))))
+      (delay (apply-rules query-pattern frame history))))
    frame-stream))
 
 ;; Compound queries
 
-(define (conjoin conjuncts frame-stream)
+(define (conjoin conjuncts frame-stream history)
   (if (empty-conjunction? conjuncts)
       frame-stream
       (conjoin (rest-conjuncts conjuncts)
                (qeval (first-conjunct conjuncts)
-                      frame-stream))))
+                      frame-stream
+                      history)
+               history)))
 (put 'and 'qeval conjoin)
 
-(define (disjoin disjuncts frame-stream)
+(define (disjoin disjuncts frame-stream history)
   (if (empty-disjunction? disjuncts)
       the-empty-stream
       (interleave-delayed
-       (qeval (first-disjunct disjuncts) frame-stream)
+       (qeval (first-disjunct disjuncts) frame-stream history)
        (delay (disjoin (rest-disjuncts disjuncts)
-                       frame-stream)))))
+                       frame-stream
+                       history)))))
 (put 'or 'qeval disjoin)
 
 ;; Filters
 
-(define (negate operands frame-stream)
+(define (negate operands frame-stream history)
   (stream-flatmap
    (lambda (frame)
      (if (stream-null? (qeval (negated-query operands)
-                              (singleton-stream frame)))
+                              (singleton-stream frame)
+                              history))
          (singleton-stream frame)
          the-empty-stream))
    frame-stream))
 (put 'not 'qeval negate)
 
-(define (lisp-value call frame-stream)
+(define (lisp-value call frame-stream history)
   (stream-flatmap
    (lambda (frame)
      (if (execute
@@ -307,7 +332,7 @@ issues of infinite loops.
   (apply (eval (predicate exp) (interaction-environment))
          (args exp)))
 
-(define (always-true ignore frame-stream) frame-stream)
+(define (always-true ignore frame-stream history) frame-stream)
 (put 'always-true 'qeval always-true)
 
 ;;; Pattern Matcher
@@ -344,12 +369,12 @@ issues of infinite loops.
 
 ;; Rules and Unification
 
-(define (apply-rules pattern frame)
+(define (apply-rules pattern frame history)
   (stream-flatmap (lambda (rule)
-                    (apply-a-rule rule pattern frame))
+                    (apply-a-rule rule pattern frame history))
                   (fetch-rules pattern frame)))
 
-(define (apply-a-rule rule query-pattern query-frame)
+(define (apply-a-rule rule query-pattern query-frame history)
   (let ((clean-rule (rename-variables-in rule)))
     (let ((unify-result
            (unify-match query-pattern
@@ -357,8 +382,16 @@ issues of infinite loops.
                         query-frame)))
       (if (eq? unify-result 'failed)
           the-empty-stream
-          (qeval (rule-body clean-rule)
-                 (singleton-stream unify-result))))))
+          (let ((new-event
+                 (make-history-entry (conclusion clean-rule)
+                                     unify-result)))
+            (if (in-history? new-event history)
+                (begin
+                  (display-loop-notification new-event)
+                  the-empty-stream)
+                (qeval (rule-body clean-rule)
+                       (singleton-stream unify-result)
+                       (extend-history new-event history))))))))
 
 (define (rename-variables-in rule)
   (let ((rule-application-id (new-rule-application-id)))

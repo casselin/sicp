@@ -10,6 +10,14 @@
       (cons-stream (proc (stream-car s))
                    (stream-map proc (stream-cdr s)))))
 
+(define (stream-filter pred stream)
+  (cond ((stream-null? stream) the-empty-stream)
+        ((pred (stream-car stream))
+         (cons-stream (stream-car stream)
+                      (stream-filter pred
+                                     (stream-cdr stream))))
+        (else (stream-filter pred (stream-cdr stream)))))
+
 (define (stream-for-each proc s)
   (if (stream-null? s)
       'done
@@ -35,6 +43,12 @@
       (cons-stream
        (stream-car s1)
        (stream-append-delayed (stream-cdr s1) delayed-s2))))
+
+(define (interleave s1 s2)
+  (if (stream-null? s1)
+      s2
+      (cons-stream (stream-car s1)
+                   (interleave s2 (stream-cdr s1)))))
 
 (define (interleave-delayed s1 delayed-s2)
   (if (stream-null? s1)

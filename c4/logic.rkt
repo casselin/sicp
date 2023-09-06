@@ -246,7 +246,8 @@ issues of infinite loops.
                             frame
                             (lambda (v f)
                               (contract-question-mark v))))
-             (qeval q (singleton-stream '()) (new-history))))
+             (force-frame-stream
+              (qeval q (singleton-stream the-empty-frame) (new-history)))))
            (query-driver-loop)))))
 
 (define (instantiate exp frame unbound-var-handler)
@@ -618,6 +619,7 @@ the assertion passed to add-assertion!.
                        (number->string (cadr variable)))
         (symbol->string (cadr variable))))))
 
+#| deprecated by exercise 4.77
 (define (make-binding variable value)
   (cons variable value))
 (define (binding-variable binding)
@@ -628,3 +630,233 @@ the assertion passed to add-assertion!.
   (assoc variable frame))
 (define (extend variable value frame)
   (cons (make-binding variable value) frame))
+|#
+
+;; Exercise 4.71
+#|
+Delaying the apply-rules stream in the simple-query procedure avoids a
+situation where no results are displayed because the first rule being
+applied causes an infinite loop. By delaying the rules stream, the
+evaluator will check all of the assertions before possibly entering in
+an infinite loop, thereby providing some results. This is also the case
+with the delayed disjuncts procedure, where earlier queries in the or
+clause can return some results before possibly entering infinite loops
+and returning nothing.
+|#
+
+;; Exercise 4.72
+#|
+disjoin and stream-flatmap interleave the streams so that, in the event
+that the first stream is infinite, elements from later streams will also
+be included.
+|#
+
+;; Exercise 4.73
+#|
+It is necessary for flatten-stream to delay the flattening of the stream-cdr
+so that (flatten-stream (stream-cdr stream)) is not evaluated immediately as
+an argument to the interleaving procedure. This is necessary because if the
+stream being flattened is infinite, evaluation of the above expression will
+result in an infinite loop.
+|#
+
+;; Exercise 4.74
+; a
+(define (simple-stream-flatmap proc s)
+  (simple-flatten (stream-map proc s)))
+(define (simple-flatten stream)
+  (stream-map stream-car
+              (stream-filter (lambda (x) (not (stream-null? x)))
+                             stream)))
+; b
+#|
+This will not change the behaviour of the query system because the
+interleave-delayed procedure behaves the same way when the input stream
+is composed of only singleton or empty streams.
+|#
+
+;; Exercise 4.75
+(define (singleton-stream? stream)
+  (and (not (stream-null? stream))
+       (stream-null? (stream-cdr stream))))
+(define (unique-query exps) (car exps))
+
+(define (uniquely-asserted operands frame-stream history)
+  (stream-flatmap
+   (lambda (frame)
+     (let ((qstream (qeval (unique-query operands)
+                           (singleton-stream frame)
+                           history)))
+       (if (singleton-stream? qstream)
+           qstream
+           the-empty-stream)))
+   frame-stream))
+
+(put 'unique 'qeval uniquely-asserted)
+
+;; Exercise 4.76
+(define (merge-frames f1 f2)
+  (cond ((eq? f2 'failed) 'failed)
+        ((null? f1) f2)
+        (else
+         (let ((var (binding-variable (car f1)))
+               (val (binding-value (car f1))))
+           (merge-frames (cdr f1)
+                         (extend-if-possible var val f2))))))
+
+(define (conjoin-frame-streams s1 s2)
+  (stream-filter
+   (lambda (frame) (not (eq? frame 'failed)))
+   (pairwise-merge-streams s1 s2 merge-frames)))
+
+(define (conjoin2 conjuncts frame-stream history)
+  (if (empty-conjunction? conjuncts)
+      frame-stream
+      (conjoin-frame-streams
+       (qeval (first-conjunct conjuncts) frame-stream history)
+       (conjoin2 (rest-conjuncts conjuncts)
+                 frame-stream history))))
+;(put 'and 'qeval conjoin2)
+      
+; Stream-pairing operations (bundled with the exercise solution rather than
+; in stream.rkt)
+(define (cartesian-streams s t)
+  (if (stream-null? s)
+      the-empty-stream
+      (interleave-delayed
+       (stream-map (lambda (x) (list (stream-car s) x))
+                   t)
+       (delay (cartesian-streams (stream-cdr s) t)))))
+
+(define (pairwise-merge-streams s1 s2 merge-proc)
+  (stream-map
+   (lambda (pair) (merge-proc (car pair) (cadr pair)))
+   (cartesian-streams s1 s2)))
+
+;; Exercise 4.77
+(define (make-binding variable value)
+  (cons variable value))
+(define (binding-variable binding)
+  (car binding))
+(define (binding-value binding)
+  (cdr binding))
+
+(define (make-promise predicate proc)
+  (cons predicate proc))
+(define (promise-predicate promise)
+  (car promise))
+(define (promise-proc promise)
+  (cdr promise))
+(define (fulfillable? promise frame)
+  ((promise-predicate promise) frame))
+(define (force-promise promise frame)
+  ((promise-proc promise) frame))
+
+(define (make-frame promises bindings)
+  (cons promises bindings))
+(define the-empty-frame (make-frame '() '()))
+(define (promises frame)
+  (if (eq? frame 'failed)
+      (error "Failed frame -- PROMISES")
+      (car frame)))
+(define (bindings frame)
+  (if (eq? frame 'failed)
+      (error "Failed frame -- BINDINGS")
+      (cdr frame)))
+(define (add-promise promise frame)
+  (if (eq? frame 'failed)
+      'failed
+      (let ((ps (promises frame))
+            (bs (bindings frame)))
+        (make-frame (cons promise ps) bs))))
+(define (try-promises frame)
+  (define (iter promises result unfulfilled)
+    (cond ((eq? result 'failed) 'failed)
+          ((null? promises)
+           (make-frame unfulfilled (bindings result)))
+          ((fulfillable? (car promises) result)
+           (iter (cdr promises)
+                 (force-promise (car promises) result)
+                 unfulfilled))
+          (else
+           (iter (cdr promises)
+                 result
+                 (cons (car promises) unfulfilled)))))
+  (if (eq? frame 'failed)
+      'failed
+      (iter (promises frame)
+            (make-frame '() (bindings frame))
+            '())))
+(define (force-promises frame)
+  (define (iter promises result)
+    (cond ((eq? result 'failed) 'failed)
+          ((null? promises) result)
+          (else
+           (iter (cdr promises)
+                 (force-promise (car promises) result)))))
+  (if (eq? frame 'failed)
+      'failed
+      (iter (promises frame)
+            (make-frame '() (bindings frame)))))
+(define (binding-in-frame variable frame)
+  (assoc variable (bindings frame)))
+(define (all-bound? pat frame)
+  (cond ((var? pat)
+         (let ((binding (binding-in-frame pat frame)))
+           (and binding
+                (all-bound? (binding-value binding)
+                            frame))))
+        ((pair? pat)
+         (and (all-bound? (car pat) frame)
+              (all-bound? (cdr pat) frame)))
+        (else true)))
+(define (extend variable value frame)
+  (try-promises (make-frame (promises frame)
+                            (cons (cons variable value)
+                                  (bindings frame)))))
+
+(define (force-frame-stream frame-stream)
+  (stream-filter
+   (lambda (frame) (not (eq? frame 'failed)))
+   (stream-map force-promises frame-stream)))
+
+(define (pattern-variables exp)
+  (cond ((var? exp) (list exp))
+        ((pair? exp)
+         (append (pattern-variables (car exp))
+                 (pattern-variables (cdr exp))))
+        (else '())))
+
+(define (delayed-negate operands frame-stream history)
+  (let ((pat (negated-query operands)))
+    (let ((pred (lambda (frame)
+                  (all-bound? pat frame)))
+          (query (lambda (frame)
+                   (if (stream-null? (qeval pat
+                                            (singleton-stream frame)
+                                            history))
+                       frame
+                       'failed))))
+      (stream-map
+       (lambda (frame) (add-promise (make-promise pred query)
+                                    frame))
+       frame-stream))))
+(put 'not 'qeval delayed-negate)
+
+(define (delayed-lisp-value call frame-stream history)
+  (let ((pred (lambda (frame)
+                (all-bound? call frame)))
+        (filter (lambda (frame)
+                  (if (execute
+                       (instantiate
+                         call
+                         frame
+                         (lambda (v f)
+                           (error "Unknown pat var -- LISP-VALUE" v))))
+                      frame
+                      'failed))))
+    (stream-map
+     (lambda (frame) (add-promise (make-promise pred filter)
+                                  frame))
+     frame-stream)))
+(put 'lisp-value 'qeval delayed-lisp-value)

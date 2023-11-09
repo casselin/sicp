@@ -168,22 +168,38 @@ value can be left on the stack unchanged.
 
 ; The stack
 (define (make-stack)
-  (let ((s '()))
+  (let ((s '())
+        (number-pushes 0)
+        (max-depth 0)
+        (current-depth 0))
     (define (push x)
-      (set! s (cons x s)))
+      (set! s (cons x s))
+      (set! number-pushes (+ 1 number-pushes))
+      (set! current-depth (+ 1 current-depth))
+      (set! max-depth (max current-depth max-depth)))
     (define (pop)
       (if (null? s)
           (error "Empty stack -- POP")
           (let ((top (car s)))
             (set! s (cdr s))
+            (set! current-depth (- current-depth 1))
             top)))
     (define (initialize)
       (set! s '())
+      (set! number-pushes 0)
+      (set! max-depth 0)
+      (set! current-depth 0)
       'done)
+    (define (print-statistics)
+      (newline)
+      (display (list 'total-pushes  '= number-pushes
+                     'maximum-depth '= max-depth)))
     (define (dispatch message)
       (cond ((eq? message 'push) push)
             ((eq? message 'pop) (pop))
             ((eq? message 'initialize) (initialize))
+            ((eq? message 'print-statistics)
+             (print-statistics))
             (else (error "Unknown request -- STACK"
                          message))))
     dispatch))
@@ -203,11 +219,25 @@ value can be left on the stack unchanged.
         (inst-list '())
         (entry-points '())
         (stack-regs '())
-        (reg-sources '()))
+        (reg-sources '())
+        ;; exercise 5.15
+        (inst-count 0)
+        ;; exercise 5.16
+        (inst-tracing false))
         ;
+    ;; exercise 5.15
+    (define (print-instruction-count)
+        (newline)
+        (display (list 'instructions-executed '= inst-count))
+        (set! inst-count 0))
+    ;
     (let ((the-ops
            (list (list 'initialize-stack
-                       (lambda () (stack 'initialize)))))
+                       (lambda () (stack 'initialize)))
+                 (list 'print-stack-statistics
+                       (lambda () (stack 'print-statistics)))
+                 (list 'print-instruction-count
+                       (lambda () (print-instruction-count)))))
           (register-table
            (list (list 'pc pc) (list 'flag flag))))
       (define (allocate-register name)
@@ -230,8 +260,24 @@ value can be left on the stack unchanged.
         (let ((insts (get-contents pc)))
           (if (null? insts)
               'done
-              (begin
-                ((instruction-execution-proc (car insts)))
+              ;; exercise 5.16
+              (let ((next-inst (car insts)))
+                (if inst-tracing
+                    (begin
+                      ;; exercise 5.17
+                      (for-each
+                       (lambda (label)
+                         (newline)
+                         (display "Entering label: ")
+                         (display label))
+                       (instruction-preceding-labels next-inst))
+                      ;
+                      (newline)
+                      (display (instruction-text next-inst))))
+                ((instruction-execution-proc next-inst))
+                ;; exercise 5.15
+                (set! inst-count (+ 1 inst-count))
+                ;
                 (execute)))))
       (define (dispatch message)
         (cond ((eq? message 'start)
@@ -258,6 +304,16 @@ value can be left on the stack unchanged.
               ((eq? message 'get-entry-points) entry-points)
               ((eq? message 'get-stack-registers) stack-regs)
               ((eq? message 'get-register-sources) reg-sources)
+              ;; exercise 5.15
+              ((eq? message 'print-instruction-count)
+               (print-instruction-count))
+              ;; exercise 5.16
+              ((eq? message 'trace-on)
+               (set! inst-tracing true)
+               'instruction-tracing-on)
+              ((eq? message 'trace-off)
+               (set! inst-tracing false)
+               'instruction-tracing-off)
               ;
               (else (error "Unknown request -- MACHINE" message))))
       dispatch)))
@@ -290,10 +346,18 @@ value can be left on the stack unchanged.
                               (if (has-label? next-inst labels)
                                   (error "Duplicate label -- EXTRACT-LABELS"
                                          next-inst)
-                                  (receive insts
-                                           (cons (make-label-entry next-inst
-                                                                   insts)
-                                                 labels)))
+                                  ;; exercise 5.17
+                                  (begin
+                                    (if (not (null? insts))
+                                        (let ((first-inst (car insts)))
+                                          (set-instruction-preceding-labels!
+                                           first-inst (cons next-inst
+                                                            (instruction-preceding-labels
+                                                             first-inst)))))
+                                        (receive insts
+                                                 (cons (make-label-entry next-inst
+                                                                         insts)
+                                                       labels))))
                               ;
                               (receive (cons (make-instruction next-inst)
                                              insts)
@@ -313,6 +377,7 @@ value can be left on the stack unchanged.
          pc flag stack ops)))
      insts)))
 
+#|
 (define (make-instruction text)
   (cons text '()))
 (define (instruction-text inst)
@@ -321,6 +386,22 @@ value can be left on the stack unchanged.
   (cdr inst))
 (define (set-instruction-execution-proc! inst proc)
   (set-cdr! inst proc))
+|#
+
+(define (make-instruction text)
+  (list text '() '()))
+(define (instruction-text inst)
+  (car inst))
+(define (instruction-execution-proc inst)
+  (cadr inst))
+(define (set-instruction-execution-proc! inst proc)
+  (set-car! (cdr inst) proc))
+;; exercise 5.17
+(define (instruction-preceding-labels inst)
+  (caddr inst))
+(define (set-instruction-preceding-labels! inst labels)
+  (set-car! (cddr inst) labels))
+;
 
 (define (make-label-entry label-name insts)
   (cons label-name insts))
@@ -705,7 +786,7 @@ let (...
 
 (define fib-machine-controller
   '(controller
-    (assign continue (label fib-done))
+      (assign continue (label fib-done))
     fib-loop
       (test (op <) (reg n) (const 2))
       (branch (label immediate-answer))
@@ -735,3 +816,34 @@ let (...
       (assign val (reg n))                ;base case: Fib(n) = n
       (goto (reg continue))
     fib-done))
+
+;; Exercise 4.14
+(define fact-recur-controller
+  '(controller
+    start
+      (perform (op initialize-stack))
+      (assign n (op read))
+      (assign continue (label fact-done))
+    fact-loop
+      (test (op =) (reg n) (const 1))
+      (branch (label base-case))
+      ;; Set up for the recursive call by saving n and continue
+      ;; Set up continue so that the computation will continue
+      ;; at after-fact when the subroutine returns
+      (save continue)
+      (save n)
+      (assign n (op -) (reg n) (const 1))
+      (assign continue (label after-fact))
+      (goto (label fact-loop))
+    after-fact
+      (restore n)
+      (restore continue)
+      (assign val (op *) (reg n) (reg val)) ;val now contains n(n-1)!
+      (goto (reg continue))                 ;return to caller
+    base-case
+      (assign val (const 1))                ;base case: 1!=1
+      (goto (reg continue))                 ;return to caller
+    fact-done
+      (perform (op print) (reg val))
+      (perform (op print-instruction-count))
+      (goto (label start))))

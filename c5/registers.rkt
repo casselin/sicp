@@ -150,13 +150,28 @@ value can be left on the stack unchanged.
     ;
     machine))
 
-; Registers
+;; Registers
+; tracing added by exercise 5.18
 (define (make-register name)
-  (let ((contents '*unassigned*))
+  (let ((contents '*unassigned*)
+        (tracing false))
     (define (dispatch message)
       (cond ((eq? message 'get) contents)
             ((eq? message 'set)
-             (lambda (value) (set! contents value)))
+             (lambda (value)
+               (if tracing
+                   (let ((prev contents))
+                     (newline)
+                     (display
+                      (list name 'old '= contents 'new '= value))))
+               (set! contents value)))
+             ;(lambda (value) (set! contents value)))
+            ((eq? message 'trace-on)
+             (set! tracing true)
+             (display (list name 'tracing 'on)))
+            ((eq? message 'trace-off)
+             (set! tracing false)
+             (display (list name 'tracing 'off)))
             (else
              (error "Unknown request -- REGISTER" message))))
     dispatch))
@@ -314,6 +329,15 @@ value can be left on the stack unchanged.
               ((eq? message 'trace-off)
                (set! inst-tracing false)
                'instruction-tracing-off)
+              ;; exercise 5.18
+              ((eq? message 'register-trace-on)
+               (lambda (name)
+                 (let ((reg (lookup-register name)))
+                   (reg 'trace-on))))
+              ((eq? message 'register-trace-off)
+               (lambda (name)
+                 (let ((reg (lookup-register name)))
+                   (reg 'trace-off))))
               ;
               (else (error "Unknown request -- MACHINE" message))))
       dispatch)))

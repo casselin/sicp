@@ -238,7 +238,12 @@ value can be left on the stack unchanged.
         ;; exercise 5.15
         (inst-count 0)
         ;; exercise 5.16
-        (inst-tracing false))
+        (inst-tracing false)
+        ;; exercise 5.19
+        (current-label '*unassigned*)
+        (current-offset 1)
+        (paused? false)
+        (bp-table (make-breakpoint-table)))
         ;
     ;; exercise 5.15
     (define (print-instruction-count)
@@ -271,6 +276,40 @@ value can be left on the stack unchanged.
                 (allocate-register name)
                 (lookup-register name)))))
       ;
+      ;; exercises 5.15, 5.16, 5.17, 5.19 
+      (define (execute)
+        (let ((insts (get-contents pc)))
+          (if (null? insts)
+              'done
+              (let ((next-inst (car insts)))
+                (for-each
+                 (lambda (label)
+                   (set! current-label label)
+                   (set! current-offset 1)
+                   (if inst-tracing
+                       (begin
+                         (newline)
+                         (display "Entering label: ")
+                         (display label))))
+                 (instruction-preceding-labels next-inst))
+                (if (and ((bp-table 'at-breakpoint?) current-label current-offset)
+                         (not paused?))
+                    (begin
+                      (set! paused? true)
+                      (newline)
+                      (display "Pausing at ")
+                      (display "Label: ")
+                      (display current-label)
+                      (display " Offset: ")
+                      (display current-offset))
+                    (begin
+                      (set! paused? false)
+                      ((instruction-execution-proc next-inst))
+                      (set! inst-count (+ 1 inst-count))
+                      (set! current-offset (+ 1 current-offset))
+                      (execute)))))))
+      ;
+      #|
       (define (execute)
         (let ((insts (get-contents pc)))
           (if (null? insts)
@@ -294,6 +333,7 @@ value can be left on the stack unchanged.
                 (set! inst-count (+ 1 inst-count))
                 ;
                 (execute)))))
+      |#
       (define (dispatch message)
         (cond ((eq? message 'start)
                (set-contents! pc the-instruction-sequence)
@@ -338,6 +378,20 @@ value can be left on the stack unchanged.
                (lambda (name)
                  (let ((reg (lookup-register name)))
                    (reg 'trace-off))))
+              ;; exercise 5.19
+              ((eq? message 'set-breakpoint)
+               (lambda (label n)
+                 ((bp-table 'insert) label n)
+                 'done))
+              ((eq? message 'cancel-breakpoint)
+               (lambda (label n)
+                 ((bp-table 'cancel) label n)
+                 'done))
+              ((eq? message 'cancel-all-breakpoints)
+               (bp-table 'cancel-all)
+               'done)
+              ((eq? message 'proceed)
+               (execute))
               ;
               (else (error "Unknown request -- MACHINE" message))))
       dispatch)))
@@ -841,7 +895,7 @@ let (...
       (goto (reg continue))
     fib-done))
 
-;; Exercise 4.14
+;; Exercise 5.14
 (define fact-recur-controller
   '(controller
     start
@@ -871,3 +925,52 @@ let (...
       (perform (op print) (reg val))
       (perform (op print-instruction-count))
       (goto (label start))))
+
+;; Exercise 5.19
+(define (make-breakpoint-table)
+  (let ((table (list '*table*)))
+    (define (at-breakpoint? label line-number)
+      (let ((subtable (assoc label (cdr table))))
+        (if subtable
+            (let ((record (assoc line-number (cdr subtable))))
+              (if record
+                  (cdr record)
+                  false))
+            false)))
+    (define (insert-breakpoint label line-number)
+      (let ((subtable (assoc label (cdr table))))
+        (if subtable
+            (let ((record (assoc line-number (cdr subtable))))
+              (if record
+                  (set-cdr! record true)
+                  (set-cdr! subtable
+                            (cons (cons line-number true)
+                                  (cdr subtable)))))
+            (set-cdr! table
+                      (cons (list label
+                                  (cons line-number true))
+                            (cdr table))))))
+    (define (cancel-breakpoint label line-number)
+      (let ((subtable (assoc label (cdr table))))
+        (if subtable
+            (let ((record (assoc line-number (cdr subtable))))
+              (if record
+                  (set-cdr! record false))))))
+    (define (cancel-all)
+      (set! table (list '*table*)))
+    (define (dispatch m)
+      (cond ((eq? m 'insert) insert-breakpoint)
+            ((eq? m 'cancel) cancel-breakpoint)
+            ((eq? m 'at-breakpoint?) at-breakpoint?)
+            ((eq? m 'cancel-all) (cancel-all))
+            (else (error "Unknown operation -- BREAKPOINT-TABLE" m))))
+    dispatch))
+
+(define (set-breakpoint machine label n)
+  ((machine 'set-breakpoint) label n))
+(define (proceed-machine machine)
+  (machine 'proceed))
+(define (cancel-breakpoint machine label n)
+  ((machine 'cancel-breakpoint) label n))
+(define (cancel-all-breakpoints machine)
+  (machine 'cancel-all-breakpoints))

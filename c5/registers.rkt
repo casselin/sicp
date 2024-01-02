@@ -1,4 +1,5 @@
 #lang sicp
+(#%provide (all-defined))
 ;;; Designing Register Machines
 ;; GCD machine
 (define gcd-controller

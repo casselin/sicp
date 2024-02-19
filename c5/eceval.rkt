@@ -61,15 +61,21 @@
       (goto (reg continue))
     ev-application
       (save continue)
-      (save env)
       (assign unev (op operands) (reg exp))
-      (save unev)
       (assign exp (op operator) (reg exp))
+      (test (op variable?) (reg exp))
+      (branch (label ev-appl-operator-lookup))
+      (save env)
+      (save unev)
       (assign continue (label ev-appl-did-operator))
+      (goto (label eval-dispatch))
+    ev-appl-operator-lookup
+      (assign continue (label ev-appl-op-after-restore))
       (goto (label eval-dispatch))
     ev-appl-did-operator
       (restore unev)                      ;; the operands
       (restore env)
+     ev-appl-op-after-restore
       (assign argl (op empty-arglist))
       (assign proc (reg val))             ;; the operator
       (test (op no-operands?) (reg unev))
@@ -122,6 +128,7 @@
       (assign unev (op begin-actions) (reg exp))
       (save continue)
       (goto (label ev-sequence))
+    ;; tail-recursive ev-sequence
     ev-sequence
       (assign exp (op first-exp) (reg unev))
       (test (op last-exp?) (reg unev))
@@ -138,6 +145,26 @@
     ev-sequence-last-exp
       (restore continue)
       (goto (label eval-dispatch))
+    ;
+    ;; non-tail recursive ev-sequence
+    #|
+    ev-sequence
+      (test (op no-more-exps?) (reg unev))
+      (branch (label ev-sequence-end))
+      (assign exp (op first-exp) (reg unev))
+      (save unev)
+      (save env)
+      (assign continue (label ev-sequence-continue))
+      (goto (label eval-dispatch))
+    ev-sequence-continue
+      (restore env)
+      (restore unev)
+      (assign unev (op rest-exps) (reg unev))
+      (goto (label ev-sequence))
+    ev-sequence-end
+      (restore continue)
+      (goto (reg continue))
+    |#
     ev-if
       (save exp)                                ;; save expression for later
       (save env)

@@ -262,7 +262,7 @@
                                       (reg argl)))))))
        after-call))))
 
-(define all-regs '(env proc val argl continue))
+(define all-regs '(env proc val argl continue arg1 arg2))
 (define (compile-proc-appl target linkage)
   (cond ((and (eq? target 'val) (not (eq? linkage 'return)))
          (make-instruction-sequence
@@ -364,20 +364,6 @@
    (append (statements seq1) (statements seq2))))
 
 ;; Exercise 5.38
-(define prim-regs '(arg1 arg2))
-(define (spread-arguments operands)
-  (define (iter args regs)
-    (if (null? args)
-        (empty-instruction-sequence)
-        (let ((first-arg (compile (car args)
-                                  (car regs)
-                                  'next)))
-          (preserving (list-union (list 'env)
-                                  prim-regs)
-                      first-arg
-                      (iter (cdr args) (cdr regs))))))
-  (iter operands prim-regs))
-
 (define (open-code? exp)
   (or (tagged-list? exp '+)
       (tagged-list? exp '-)
@@ -386,71 +372,137 @@
 (define (binary-primitive? exp)
   (or (tagged-list? exp '-)
       (tagged-list? exp '=)))
+;a
+(define (spread-arguments operands)
+  (if (= (length operands) 2)
+      (preserving
+       '(env)
+       (compile (car operands) 'arg1 'next)
+       (preserving
+        '(arg1)
+        (compile (cadr operands) 'arg2 'next)
+        (make-instruction-sequence
+         '(arg1) '() '())))
+      (error
+       "Illegal number of operands (should be 2) -- SPREAD-ARGUMENTS"
+       operands)))
 (define (compile-open-code exp target linkage)
   (cond ((binary-primitive? exp)
-         (compile-binary-primitive exp target linkage))
+         (compile-open-binary exp target linkage))
         (else
-         (compile-nary-primitive exp target linkage))))
-(define (compile-binary-primitive exp target linkage)
-  (let ((op (car exp))
-        (args (list (cadr exp)
-                    (caddr exp))))
-    (append-instruction-sequences
-     (spread-arguments args)
-     (end-with-linkage
-      linkage
-      (make-instruction-sequence
-       prim-regs
-       (list target)
-       `((assign ,target
-                 (op ,op)
-                 .
-                 ,(map (lambda (arg) (list 'reg arg))
-                       prim-regs))))))))
-(define (compile-nary-primitive exp target linkage)
+         (compile-open-nary exp target linkage))))
+;b
+(define (compile-open-binary exp target linkage)
   (let ((op (car exp))
         (args (cdr exp)))
-    (let ((compiled-args (nary-prim-dispatch op args)))
-      (append-instruction-sequences
-       compiled-args
-       (end-with-linkage
-        linkage
-        (make-instruction-sequence
-         (list (car prim-regs))
-         (list target)
-         `((assign ,target (reg ,(car prim-regs))))))))))
-(define (nary-prim-dispatch op args)
-  (let ((id (cond ((eq? op '+) 0)
-                  ((eq? op '*) 1)
-                  (else
-                   (error "Unknown n-ary operator" op)))))
-    (accumulate-args op
-                     (make-instruction-sequence
-                      '()
-                      (list (car prim-regs))
-                      `((assign ,(car prim-regs)
-                                (const ,id))))
-                     args)))
+    (end-with-linkage
+     linkage
+     (append-instruction-sequences
+      (spread-arguments args)
+      (make-instruction-sequence
+       '(arg1 arg2) (list target)
+       `((assign ,target (op ,op) (reg arg1) (reg arg2))))))))
+;d
+(define (take n list)
+  (if (or (null? list) (= n 0))
+      '()
+      (cons (car list)
+            (take (- n 1) (cdr list)))))
+(define (drop n list)
+  (cond ((null? list) '())
+        ((= n 0) list)
+        (else
+         (drop (- n 1) (cdr list)))))
+(define (halve list)
+  (let ((n (quotient (length list) 2)))
+    (cons (take n list)
+          (drop n list))))
+(define (compile-open-nary exp target linkage)
+  (let ((op (car exp))
+        (args (cdr exp)))
+    (let ((id (cond ((eq? op '+) 0)
+                    ((eq? op '*) 1)
+                    (else (error "Unknown n-ary operator" op)))))
+      (cond ((null? args)
+             (end-with-linkage
+              linkage
+              (make-instruction-sequence
+               '() (list target)
+               `((assign target (const ,id))))))
+            ((null? (cdr args))
+             (end-with-linkage
+              linkage
+              (append-instruction-sequences
+               (compile (car args) 'arg1 'next)
+               (make-instruction-sequence
+                '(arg1) (list target)
+                `((assign target (op ,op) (reg arg1) (const ,id)))))))
+            ((null? (cddr args))
+             (end-with-linkage
+              linkage
+              (append-instruction-sequences
+               (spread-arguments args)
+               (make-instruction-sequence
+                '(arg1 arg2) (list target)
+                `((assign ,target (op ,op) (reg arg1) (reg arg2)))))))
+            (else
+             (let ((split-args (halve args)))
+               (end-with-linkage
+                linkage
+                (append-instruction-sequences
+                 (spread-arguments (list (cons op (car split-args))
+                                         (cons op (cdr split-args))))
+                 (make-instruction-sequence
+                  '(arg1 arg2) (list target)
+                  `((assign ,target (op ,op) (reg arg1) (reg arg2))))))))))))
 
-;; must initialize acc with instruction sequence that assigns the
-; identity of operator op to arg1
-(define (accumulate-args op acc args)
-  (if (null? args)
-      acc
-      (let ((first-arg (car args))
-            (rest-args (cdr args)))
-        (let ((new-acc (append-instruction-sequences
-                        acc
-                        (preserving
-                         (list-union '(env)
-                                     prim-regs)
-                         (compile first-arg (cadr prim-regs) 'next)
-                         (make-instruction-sequence
-                          (list (car prim-regs))
-                          (list (car prim-regs))
-                          `((assign ,(car prim-regs)
-                                    (op ,op)
-                                    .
-                                    ,(map (lambda (arg) (list 'reg arg))
-                                          prim-regs))))))))
-          (accumulate-args op new-acc (cdr args))))))
+;; Exercise 5.39
+(define (make-lexical-address frame-num displacement-num)
+  (list frame-num displacement-num))
+(define (lexical-frame-num lexical-address)
+  (car lexical-address))
+(define (lexical-displacement-num lexical-address)
+  (cadr lexical-address))
+(define (env-ref env n)
+  (cond ((eq? env the-empty-environment)
+         (error "Invalid index -- ENVIRONMENT-REF"
+                (list n env)))
+        ((= n 0)
+         (first-frame env))
+        (else
+         (env-ref (enclosing-environment env)
+                  (- n 1)))))
+(define (frame-ref frame n)
+  (define (iter vars vals i)
+    (if (= i 0)
+        (cons (car vars) (car vals))
+        (iter (cdr vars) (cdr vals) (- i 1))))
+  (iter (frame-variables frame)
+        (frame-values frame)
+        n))
+(define (frame-set! frame val n)
+  (define (iter values i)
+    (if (= i 0)
+        (set-car! values val)
+        (iter (cdr values) (- i 1))))
+  (iter (frame-values frame) n))
+
+(define (lexical-address-lookup address env)
+  (let ((env-index (lexical-frame-num address))
+        (frame-index (lexical-displacement-num address)))
+    (let ((frame (env-ref env env-index)))
+      (let ((binding (frame-ref frame frame-index)))
+        (if (eq? (cdr binding) '*unassigned*)
+            (error "Unbound variable -- LEXICAL-ADDRESS-LOOKUP" binding)
+            (cdr binding))))))
+
+(define (lexical-address-set! addr val env)
+  (let ((env-index (lexical-frame-num addr))
+        (frame-index (lexical-displacement-num addr)))
+    (let ((frame (env-ref env env-index)))
+      (frame-set! frame val frame-index)
+      'ok)))
+
+;; Exercise 5.40
+(define (extend-cenv vars base-cenv)
+  (cons vars base-cenv))

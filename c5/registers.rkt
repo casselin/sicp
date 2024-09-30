@@ -653,6 +653,15 @@ to the a register.
   (let ((op (lookup-prim (operation-exp-op exp) operations))
         (aprocs
          (map (lambda (e)
+                (make-primitive-exp e machine labels))
+              (operation-exp-operands exp))))
+    (lambda ()
+      (apply op (map (lambda (p) (p)) aprocs)))))
+#| exercise change breaks compiler code
+(define (make-operation-exp exp machine labels operations)
+  (let ((op (lookup-prim (operation-exp-op exp) operations))
+        (aprocs
+         (map (lambda (e)
                 ; exercise 5.9
                 (if (label-exp? e)
                     (error "Cannot perform operation on label" e)
@@ -660,7 +669,7 @@ to the a register.
               (operation-exp-operands exp))))
     (lambda ()
       (apply op (map (lambda (p) (p)) aprocs)))))
-
+|#
 (define (operation-exp? exp)
   (and (pair? exp) (tagged-list? (car exp) 'op)))
 (define (operation-exp-op operation-exp)

@@ -1,10 +1,13 @@
 #lang sicp
 (#%require "registers.rkt"
            "primitives.rkt")
+(#%provide (all-defined))
 ;;; Section 5.4 The Explicit-Control Evaluator
 ;; Controller specification
 (define eceval-controller
-  '(read-eval-print-loop
+  '(controller
+      (branch (label external-entry))     ; branches if flag is set
+    read-eval-print-loop
       (perform (op initialize-stack))
       (perform
        (op prompt-for-input) (const ";;; EC-Eval input:"))
@@ -110,6 +113,8 @@
       (branch (label primitive-apply))
       (test (op compound-procedure?) (reg proc))
       (branch (label compound-apply))
+      (test (op compiled-procedure?) (reg proc))
+      (branch (label compiled-apply))
       (goto (label unknown-procedure-type))
     primitive-apply
       (assign val (op apply-primitive-procedure)
@@ -124,6 +129,10 @@
                   (reg unev) (reg argl) (reg env))
       (assign unev (op procedure-body) (reg proc))
       (goto (label ev-sequence))
+    compiled-apply
+      (restore continue)
+      (assign val (op compiled-procedure-entry) (reg proc))
+      (goto (reg val))
     ev-begin
       (assign unev (op begin-actions) (reg exp))
       (save continue)
@@ -264,6 +273,11 @@
       (restore continue)      ; clean up stack (from apply-dispatch)
       (assign val (const unknown-procedure-type-error))
       (goto (label signal-error))
+    external-entry
+      (perform (op initialize-stack))
+      (assign env (op get-global-environment))
+      (assign continue (label print-result))
+      (goto (reg val))
     signal-error
       (perform (op user-print) (reg val))
       (goto (label read-eval-print-loop))
@@ -273,3 +287,8 @@
   (make-machine
    eceval-operations
    eceval-controller))
+
+(define (start-eceval)
+  (set-global-env! (setup-environment))
+  (set-register-contents! eceval 'flag false)
+  (start eceval))

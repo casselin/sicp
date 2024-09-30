@@ -1,5 +1,7 @@
 #lang sicp
-(#%require "primitives.rkt")
+(#%require "primitives.rkt"
+           "registers.rkt"
+           "eceval.rkt")
 
 (define (tagged-list? exp tag)
   (if (pair? exp)
@@ -221,12 +223,14 @@
        after-lambda))))
 
 ;; Operations for compiled procedures
+#|
 (define (make-compiled-procedure entry env)
   (list 'compiled-procedure entry env))
 (define (compiled-procedure? proc)
   (tagged-list? proc 'compiled-procedure))
 (define (compiled-procedure-entry c-proc) (cadr c-proc))
 (define (compiled-procedure-env c-proc) (caddr c-proc))
+|#
 
 (define (compile-lambda-body exp proc-entry cenv)
   (let ((formals (lambda-parameters exp)))
@@ -456,7 +460,7 @@
     (end-with-linkage
      linkage
      (append-instruction-sequences
-      (spread-arguments args)
+      (spread-arguments args cenv)
       (make-instruction-sequence
        '(arg1 arg2) (list target)
        `((assign ,target (op ,op) (reg arg1) (reg arg2))))))))
@@ -516,6 +520,7 @@
                   `((assign ,target (op ,op) (reg arg1) (reg arg2))))))))))))
 
 ;; Exercise 5.39
+#| moved to primitives.rkt
 (define (make-lexical-address frame-num displacement-num)
   (list frame-num displacement-num))
 (define (lexical-frame-num lexical-address)
@@ -561,6 +566,7 @@
     (let ((frame (env-ref env env-index)))
       (frame-set! frame val frame-index)
       'ok)))
+|#
 
 ;; Exercise 5.40
 (define (extend-cenv vars base-cenv)
@@ -612,3 +618,13 @@
                                            (definition-value d)))
                               defines)
                          rest)))))))
+
+(define (compile-and-go expression)
+  (let ((instructions
+         (assemble (statements
+                    (compile expression 'val 'return '()))
+                   eceval)))
+    (set-global-env! (setup-environment))
+    (set-register-contents! eceval 'val instructions)
+    (set-register-contents! eceval 'flag true)
+    (start eceval)))

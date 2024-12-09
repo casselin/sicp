@@ -1,11 +1,13 @@
 #lang sicp
 (#%require "registers.rkt"
-           "primitives.rkt")
+           "primitives.rkt"
+           "compiler.rkt")
 (#%provide (all-defined))
 ;;; Section 5.4 The Explicit-Control Evaluator
 ;; Controller specification
 (define eceval-controller
   '(controller
+      (assign compapp (label compound-apply))
       (branch (label external-entry))     ; branches if flag is set
     read-eval-print-loop
       (perform (op initialize-stack))
@@ -43,7 +45,9 @@
       (branch (label ev-cond))
       (test (op let?) (reg exp))
       (branch (label ev-let))
-      ;
+      ;; Exercise 5.48
+      (test (op compile-and-run?) (reg exp))
+      (branch (label ev-compile-and-run))
       (test (op application?) (reg exp))
       (branch (label ev-application))
       (goto (label unknown-expression-type))
@@ -266,6 +270,10 @@
       (assign val (const false))
       (restore continue)
       (goto (reg continue))
+    ev-compile-and-run
+      (assign exp (op compile-and-run-exp) (reg exp))
+      (assign val (op compile-and-run) (reg exp))
+      (goto (label external-entry))
     unknown-expression-type
       (assign val (const unknown-expression-type-error))
       (goto (label signal-error))
@@ -283,6 +291,95 @@
       (goto (label read-eval-print-loop))
     done))
 
+(define (compile-and-run expression)
+  (assemble (statements
+             (compile expression 'val 'return '()))
+            eceval))
+
+(define eceval-operations
+  (append primitive-procedures
+          (list ;;primitive operations
+           (list 'read read)
+           ;;syntax procedures
+           (list 'self-evaluating? self-evaluating?)
+           (list 'quoted? quoted?)
+           (list 'text-of-quotation text-of-quotation)
+           (list 'variable? variable?)
+           (list 'assignment? assignment?)
+           (list 'assignment-variable assignment-variable)
+           (list 'assignment-value assignment-value)
+           (list 'definition? definition?)
+           (list 'definition-variable definition-variable)
+           (list 'definition-value definition-value)
+           (list 'lambda? lambda?)
+           (list 'lambda-parameters lambda-parameters)
+           (list 'lambda-body lambda-body)
+           (list 'if? if?)
+           (list 'if-predicate if-predicate)
+           (list 'if-consequent if-consequent)
+           (list 'if-alternative if-alternative)
+           (list 'cond? cond?)
+           (list 'cond-clauses cond-clauses)
+           (list 'cond-else-clause? cond-else-clause?)
+           (list 'cond-predicate cond-predicate)
+           (list 'cond-actions cond-actions)
+           (list 'cond->if cond->if)
+           (list 'first-clause first-clause)
+           (list 'rest-clauses rest-clauses)
+           (list 'no-clauses? no-clauses?)
+           (list 'let? let?)
+           (list 'let->combination let->combination)
+           (list 'begin? begin?)
+           (list 'begin-actions begin-actions)
+           (list 'last-exp? last-exp?)
+           (list 'first-exp first-exp)
+           (list 'rest-exps rest-exps)
+           (list 'application? application?)
+           (list 'operator operator)
+           (list 'operands operands)
+           (list 'no-operands? no-operands?)
+           (list 'first-operand first-operand)
+           (list 'rest-operands rest-operands)
+           (list 'compile-and-run? compile-and-run?)
+           (list 'compile-and-run-exp compile-and-run-exp)
+           ;;operations
+           (list 'true? true?)
+           (list 'make-procedure make-procedure)
+           (list 'compound-procedure? compound-procedure?)
+           (list 'procedure-parameters procedure-parameters)
+           (list 'procedure-body procedure-body)
+           (list 'procedure-environment procedure-environment)
+           (list 'make-compiled-procedure make-compiled-procedure)
+           (list 'compiled-procedure? compiled-procedure?)
+           (list 'compiled-procedure-entry compiled-procedure-entry)
+           (list 'compiled-procedure-env compiled-procedure-env)
+           (list 'extend-environment extend-environment)
+           (list 'lookup-variable-value lookup-variable-value)
+           (list 'set-variable-value! set-variable-value!)
+           (list 'lexical-address-lookup lexical-address-lookup)
+           (list 'lexical-address-set! lexical-address-set!)
+           (list 'define-variable! define-variable!)
+           (list 'apply apply)
+           (list 'primitive-procedure? primitive-procedure?)
+           (list 'apply-primitive-procedure apply-primitive-procedure)
+           (list 'prompt-for-input prompt-for-input)
+           (list 'announce-output announce-output)
+           (list 'user-print user-print)
+           (list 'empty-arglist empty-arglist)
+           (list 'adjoin-arg adjoin-arg)
+           (list 'last-operand? last-operand?)
+           (list 'no-more-exps? no-more-exps?) ;for non-tail-recursive machine
+           (list 'compile-and-run compile-and-run)
+           ;;lazy primitives
+           (list 'delay-it delay-it)
+           (list 'thunk? thunk?)
+           (list 'thunk-exp thunk-exp)
+           (list 'thunk-env thunk-env)
+           (list 'evaluated-thunk? evaluated-thunk?)
+           (list 'thunk-value thunk-value)
+           (list 'memoize-thunk! memoize-thunk!)
+           (list 'get-global-environment get-global-environment))))
+
 (define eceval
   (make-machine
    eceval-operations
@@ -292,3 +389,13 @@
   (set-global-env! (setup-environment))
   (set-register-contents! eceval 'flag false)
   (start eceval))
+
+(define (compile-and-go expression)
+  (let ((instructions
+         (assemble (statements
+                    (compile expression 'val 'return '()))
+                   eceval)))
+    (set-global-env! (setup-environment))
+    (set-register-contents! eceval 'val instructions)
+    (set-register-contents! eceval 'flag true)
+    (start eceval)))
